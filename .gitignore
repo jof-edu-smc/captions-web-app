@@ -1,0 +1,29 @@
+# Files and Folders
+**/audio
+google-credentials.json
+**/old_submissions 
+*.pdf
+# Node
+**/node_modules
+**/dist
+
+# Vite 
+**/.vite 
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv
+venv
+.env
+env
+
+# IDEs and OS
+.vscode
+.idea
+.DS_Store
+
+# Version Control
+.git

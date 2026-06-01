@@ -1,0 +1,5 @@
+Flask>=3.0.0
+flask-cors>=4.0.0
+gspread>=6.1.0
+google-auth>=2.30.0
+python-dotenv>=1.2.0
