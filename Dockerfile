@@ -30,7 +30,7 @@ ENV FLASK_ENV=production
 
 # Install Python dependencies
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt 
 RUN pip install --no-cache-dir gunicorn
 
 # Copy backend files and application data

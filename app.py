@@ -17,10 +17,9 @@ from flask_cors import CORS
 
 pp = pprint.PrettyPrinter(indent=4)
 
-APP_DIR = Path(__file__).resolve().parent
+# Define your absolute paths first
 APP_DIR = Path(__file__).resolve().parent
 AUDIO_DIR = APP_DIR / "audio"
-
 LOCAL_LOG_PATH = APP_DIR / "submissions.csv"
 
 STEP_1_TRIALS = int(os.getenv("STEP_1_TRIALS", "5"))
@@ -39,9 +38,13 @@ CAPTION_KEYS = [
     "Caption 5 - Text",
 ]
 
-app = Flask(__name__, static_folder=None)
+# FIX: Explicitly pass absolute paths to Flask so it never misses the target inside Docker
+app = Flask(
+    __name__, 
+    static_folder=str(APP_DIR / 'static'),      
+    template_folder=str(APP_DIR / 'static')    
+)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
-
 
 @dataclass(slots=True)
 class StimulusRow:
@@ -51,20 +54,17 @@ class StimulusRow:
     caption_texts: list[str]
     source_row: dict[str, str]
 
-
 def _first_existing_path(paths: Iterable[Path]) -> Path:
     for path in paths:
         if path.exists():
             return path
     raise FileNotFoundError("No supported stimulus CSV found in captions-web-app or sheets/")
 
-
 def _clean_value(value: Any) -> str:
     if value is None:
         return ""
     text = str(value).strip()
     return text
-
 
 def _normalize_stimulus_row(row: dict[str, str]) -> StimulusRow:
     normalized = {key.strip(): _clean_value(value) for key, value in row.items() if key is not None}
@@ -143,7 +143,6 @@ def _load_stimuli() -> list[StimulusRow]:
         pp.pprint(get_template_csv())
         return get_template_csv()
 
-
 def _make_rng(seed_value: str | None) -> random.Random:
     if seed_value is None or seed_value == "":
         return random.Random()
@@ -151,7 +150,6 @@ def _make_rng(seed_value: str | None) -> random.Random:
         return random.Random(int(seed_value))
     except ValueError:
         return random.Random(seed_value)
-
 
 def _pick_rows(rows: list[StimulusRow], count: int, rng: random.Random) -> list[StimulusRow]:
     if count <= 0:
@@ -168,9 +166,7 @@ def _pick_rows(rows: list[StimulusRow], count: int, rng: random.Random) -> list[
         selected.extend(refill)
     return selected[:count]
 
-
 def _load_rating_history() -> list[dict[str, Any]]:
-    """Load all step_1 (generation) submissions with ratings from submissions.csv."""
     if not LOCAL_LOG_PATH.exists():
         return []
     try:
@@ -184,12 +180,7 @@ def _load_rating_history() -> list[dict[str, Any]]:
     except Exception:
         return []
 
-
 def _build_caption_weights(history: list[dict[str, Any]], all_rows: list[StimulusRow]) -> dict[str, dict[str, float]]:
-    """
-    Build weight mapping: {audio_file: {caption_text: weight}}.
-    Low-rated captions get higher weights for Step 2/3.
-    """
     weights = {}
     caption_ratings = {}
     
@@ -213,19 +204,16 @@ def _build_caption_weights(history: list[dict[str, Any]], all_rows: list[Stimulu
         if rated_captions:
             for caption_text, records in rated_captions.items():
                 avg_rating = sum(int(r.get("rating", "3") or "3") for r in records) / len(records)
-                weight = max(0.1, (6.0 - avg_rating) / 2.0)  # Lower rating = higher weight
+                weight = max(0.1, (6.0 - avg_rating) / 2.0)
                 weights[audio_file][caption_text] = weight
         
-        # Include initial captions as fallback
         for caption_text in row.caption_texts:
             if caption_text not in weights[audio_file]:
                 weights[audio_file][caption_text] = 1.0
     
     return weights
 
-
 def _pick_caption_for_step2_or_3(audio_file: str, row: StimulusRow, weights: dict[str, dict[str, float]], rng: random.Random) -> str:
-    """Pick a caption for Step 2/3, preferring low-rated captions."""
     if audio_file not in weights or not weights[audio_file]:
         return rng.choice(row.caption_texts) if row.caption_texts else ""
     
@@ -239,11 +227,9 @@ def _pick_caption_for_step2_or_3(audio_file: str, row: StimulusRow, weights: dic
     normalized_weights = [w / total_weight for w in weight_values]
     return rng.choices(caption_pool, weights=normalized_weights, k=1)[0]
 
-
 def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: random.Random) -> dict[str, Any]:
     caption_options = row.caption_texts[:]
     caption_index = rng.randrange(len(caption_options)) if caption_options else 0
-    
     selected_caption = caption_options[caption_index] if caption_options else ""
     
     payload: dict[str, Any] = {
@@ -258,30 +244,14 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
     }
 
     if phase == "step_1":
-        payload.update(
-            {
-                "selected_caption_index": caption_index,
-                "selected_caption": selected_caption,
-            }
-        )
+        payload.update({"selected_caption_index": caption_index, "selected_caption": selected_caption})
     elif phase == "step_2":
-        payload.update(
-            {
-                "baseline_caption": selected_caption,
-                "selected_caption_index": caption_index,
-            }
-        )
+        payload.update({"baseline_caption": selected_caption, "selected_caption_index": caption_index})
     elif phase == "step_3":
-        payload.update(
-            {
-                "selected_caption_index": caption_index,
-                "selected_caption": selected_caption,
-            }
-        )
+        payload.update({"selected_caption_index": caption_index, "selected_caption": selected_caption})
     else:
         raise ValueError(f"Unsupported phase: {phase}")
     return payload
-
 
 def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, seed_value: str | None) -> dict[str, Any]:
     rng = _make_rng(seed_value)
@@ -289,18 +259,13 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
     shuffled_rows = rows[:]
     rng.shuffle(shuffled_rows)
     
-    # Load historical ratings for weighted caption selection in Step 2/3
     history = _load_rating_history()
     caption_weights = _build_caption_weights(history, rows)
     
     total_trials = step_1_trials + step_2_trials + step_3_trials
     selected_rows = _pick_rows(shuffled_rows, total_trials, rng)
 
-    batches = {
-        "step_1": [],
-        "step_2": [],
-        "step_3": [],
-    }
+    batches = {"step_1": [], "step_2": [], "step_3": []}
 
     cursor = 0
     for trial_index in range(step_1_trials):
@@ -323,14 +288,9 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
     
     return {
         "batch_id": uuid4().hex,
-        "requested_trials": {
-            "step_1": step_1_trials,
-            "step_2": step_2_trials,
-            "step_3": step_3_trials,
-        },
+        "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
         "stimuli": batches,
     }
-
 
 def _append_local_row(record: dict[str, Any]) -> None:
     file_exists = LOCAL_LOG_PATH.exists()
@@ -341,16 +301,7 @@ def _append_local_row(record: dict[str, Any]) -> None:
             writer.writeheader()
         writer.writerow(record)
 
-
 def append_submission_row(record: dict[str, Any]) -> None:
-    """Append a submission row to Google Sheets when configured, otherwise keep a local CSV log.
-
-    Expected environment variables:
-    - GOOGLE_SHEETS_ID: target spreadsheet id
-    - GOOGLE_SERVICE_ACCOUNT_JSON: either a JSON string or a path to a service account file
-    - SUBMISSIONS_WORKSHEET: worksheet name, defaults to 'submissions'
-    """
-
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
     credentials_source = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     worksheet_name = os.getenv("SUBMISSIONS_WORKSHEET", "submissions")
@@ -376,7 +327,6 @@ def append_submission_row(record: dict[str, Any]) -> None:
     except Exception:
         _append_local_row(record)
 
-
 def _coerce_int(value: Any, fallback: int) -> int:
     try:
         parsed = int(value)
@@ -384,11 +334,10 @@ def _coerce_int(value: Any, fallback: int) -> int:
         return fallback
     return parsed if parsed >= 0 else fallback
 
-
+# ROUTE HANDLERS 
 @app.get("/api/health")
 def health_check() -> Any:
     return jsonify({"ok": True})
-
 
 @app.get("/api/get-stimuli")
 def get_stimuli() -> Any:
@@ -409,7 +358,6 @@ def get_stimuli() -> Any:
         return jsonify({"error": str(exc)}), 500
     except Exception as exc:
         return jsonify({"error": f"Failed to prepare stimuli: {exc}"}), 500
-
 
 @app.post("/api/submit-response")
 def submit_response() -> Any:
@@ -462,13 +410,11 @@ def submit_response() -> Any:
         "stored_locally": not bool(os.getenv("GOOGLE_SHEETS_ID") and os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")),
     })
 
-
 @app.get("/audio/<path:filename>")
 def serve_audio(filename: str) -> Any:
     if not AUDIO_DIR.exists():
         abort(404)
     return send_from_directory(AUDIO_DIR, filename)
-
 
 @app.get("/files/<path:filename>")
 def serve_study_file(filename: str) -> Any:
@@ -479,6 +425,12 @@ def serve_study_file(filename: str) -> Any:
         abort(404)
     return send_from_directory(APP_DIR, filename)
 
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == "__main__":
     load_dotenv()
