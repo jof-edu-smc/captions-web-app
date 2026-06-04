@@ -5,9 +5,11 @@ import json
 import os
 import random
 import pprint
+import traceback
+from google.cloud import storage
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -227,10 +229,42 @@ def _pick_caption_for_step2_or_3(audio_file: str, row: StimulusRow, weights: dic
     normalized_weights = [w / total_weight for w in weight_values]
     return rng.choices(caption_pool, weights=normalized_weights, k=1)[0]
 
+
+def generate_presigned_url(bucket_name: str, object_name: str, expiration: int = 900) -> str:
+    """Generates a secure presigned URL for an object using a dedicated service account."""
+    try:
+        gcp_project = os.getenv("GCP_PROJECT_ID")
+        
+        # Initialize the storage client targeting your project
+        storage_client = storage.Client(project=gcp_project)
+        
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        
+        # Generate the signature. The client library handles the key signature logic automatically.
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(seconds=expiration),
+            method="GET",
+        )
+        return url
+    except Exception as e:
+        print(f"Error generating presigned URL: {e}")
+        traceback.print_exc()
+        return ""
+    
 def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: random.Random) -> dict[str, Any]:
     caption_options = row.caption_texts[:]
     caption_index = rng.randrange(len(caption_options)) if caption_options else 0
     selected_caption = caption_options[caption_index] if caption_options else ""
+    
+    file_name = Path(row.audio_file_path).name # Extracts 'audio_01.mp3'
+    
+    secure_audio_url = generate_presigned_url(
+        bucket_name="stimuli", 
+        object_name=f"{file_name}", 
+        expiration=900
+    )
     
     payload: dict[str, Any] = {
         "phase": phase,
@@ -238,7 +272,7 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
         "rir_id": row.rir_id,
         "audio_file": row.audio_file,
         "audio_file_path": row.audio_file_path,
-        "audio_url": f"/audio/{Path(row.audio_file_path).name}",
+        "audio_url": secure_audio_url or f"/audio/{Path(row.audio_file_path).name}",
         "caption_options": caption_options,
         "source_row": row.source_row,
     }
@@ -285,10 +319,18 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         payload["baseline_caption"] = baseline_caption
         batches["step_3"].append(payload)
         cursor += 1
+        
+    url = generate_presigned_url("stimuli", "training_stimuli/training.wav", 3000)
+    print(f"Generated presigned URL for training stimulus: {url}")
+    training_payload = {
+        "training_step_1": {"audio_url": url},
+        "training_step_2": {"audio_url": url},
+    }
     
     return {
         "batch_id": uuid4().hex,
         "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
+        "training": training_payload,
         "stimuli": batches,
     }
 
@@ -326,13 +368,6 @@ def append_submission_row(record: dict[str, Any]) -> None:
         worksheet.append_row([record.get(key, "") for key in record.keys()])
     except Exception:
         _append_local_row(record)
-
-def _coerce_int(value: Any, fallback: int) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return fallback
-    return parsed if parsed >= 0 else fallback
 
 # ROUTE HANDLERS 
 @app.get("/api/health")

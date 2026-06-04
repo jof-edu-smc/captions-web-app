@@ -1,6 +1,7 @@
 # Files and Folders
 **/audio
 google-credentials.json
+gcp-keys.json
 **/old_submissions 
 *.pdf
 # Node

@@ -363,13 +363,96 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
   );
 }
 
+function TrainingStep1Screen({ trial, onSubmit }) {
+  const [text, setText] = useState('');
+  const remaining = 200 - text.length;
+  const baseline = "The room sounds small and dry, with very little reverberation.";
+
+  return (
+    <ScreenShell
+      eyebrow="Training · Step 1"
+      title="Practice: Generative Captioning"
+      description="This is a practice round to familiarize you with the task. Listen to the training audio below and practice writing a descriptive caption from scratch. Keep it under 200 characters."
+      footer={
+        <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
+          Continue to Step 2 Practice
+        </button>
+      }
+    >
+      <AudioBlock audioUrl={trial.audio_url} baseline={baseline} />
+      
+      {/* Examples Block: Changed to a div with a standard list */}
+      <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
+        <span className="caption-label">Training: Examples of Captions</span>
+        <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <li>Unique New York</li>
+          <li>How now Brown Cow</li>
+          <li>Something Something</li>
+        </ul>
+      </div>
+
+      <label className="text-area-shell">
+        <span className="caption-label">Practice caption</span>
+        <textarea
+          value={text}
+          onChange={(event) => setText(event.target.value.slice(0, 200))}
+          rows={6}
+          maxLength={200}
+          placeholder="Type a practice caption here..."
+        />
+      </label>
+      <div className="countdown">{remaining} characters remaining</div>
+    </ScreenShell>
+  );
+}
+
+function TrainingStep2Screen({ trial, onSubmit }) {
+  // Hardcoded baseline for the training example
+  const baseline = "The room sounds small and dry, with very little reverberation.";
+  const [text, setText] = useState(baseline);
+
+  return (
+    <ScreenShell
+      eyebrow="Training · Step 2"
+      title="Practice: Rephrasing / Editing"
+      description="Now practice the editing step. Edit the provided baseline caption if you want to improve it, or leave it unchanged."
+      footer={
+        <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
+          Start Actual Survey
+        </button>
+      }
+    >
+      <div className="caption-box" style={{ marginBottom: '10px' }}>
+        <span className="caption-label">Training: Editing the Caption</span>
+        <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <li>In questions like this, you will be asked to listen to the audio presented and review the caption paired with that audio.</li>
+          <li>You can edit the caption should find any Grammatical errors, clarity, or accuracy issues.</li>
+          <li>It is a valid option to leave the caption unedited and then click the Continue button in the bottom right.</li>
+        </ul>
+      </div>
+      <AudioBlock audioUrl={trial.audio_url} baseline={baseline} showBaseline />
+      <label className="text-area-shell" style={{ paddingTop: '5px' }}>
+        <span className="caption-label">Edit the caption</span>
+        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} />
+      </label>
+    </ScreenShell>
+  );
+}
+
 export default function App() {
   const prolificContext = useMemo(() => parseQueryParams(), []);
   const completionUrl = useMemo(() => buildCompletionUrl(prolificContext), [prolificContext]);
   const [phase, setPhase] = useState('intro');
   const [stimuli, setStimuli] = useState(null);
+  const [training, setTraining] = useState(null);
   const [demographics, setDemographics] = useState({ age_range: '', experience_in_audio: '' });
-  const [trialIndex, setTrialIndex] = useState({ step_1: 0, step_2: 0, step_3: 0 });
+  const [trialIndex, setTrialIndex] = useState({ 
+      training_step_1: 0,
+      training_step_2: 0,
+      step_1: 0, 
+      step_2: 0, 
+      step_3: 0
+  });
   const [statusMessage, setStatusMessage] = useState('Loading survey...');
   const [submitting, setSubmitting] = useState(false);
 
@@ -388,6 +471,7 @@ export default function App() {
         }
         const data = await response.json();
         setStimuli(data.stimuli);
+        setTraining(data.training);
         setStatusMessage('Survey ready.');
       } catch (error) {
         setStatusMessage(error instanceof Error ? error.message : 'Failed to load stimuli.');
@@ -456,7 +540,8 @@ export default function App() {
             setPhase('blocked');
             return;
           }
-          setPhase('step_1');
+          // Redirect to training instead of step_1
+          setPhase('training_step_1'); 
         }}
       />
     );
@@ -464,6 +549,27 @@ export default function App() {
 
   if (phase === 'blocked') {
     return <BlockedScreen />;
+  }
+
+  if (phase === 'training_step_1') {
+    const trial = training?.training_step_1;
+    console.log(trial)
+    return (
+      <TrainingStep1Screen 
+        trial={trial}
+        onSubmit={() => setPhase('training_step_2')} 
+      />
+    );
+  }
+
+  if (phase === 'training_step_2') {
+    const trial = training?.training_step_2;
+    return (
+      <TrainingStep2Screen 
+        trial={trial}
+        onSubmit={() => setPhase('step_1')} 
+      />
+    );
   }
 
   if (phase === 'step_1') {

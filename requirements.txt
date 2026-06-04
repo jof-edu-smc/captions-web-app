@@ -3,3 +3,4 @@ flask-cors>=4.0.0
 gspread>=6.1.0
 google-auth>=2.30.0
 python-dotenv>=1.2.0
+google-cloud-storage>=2.0.0
