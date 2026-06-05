@@ -132,7 +132,12 @@ def _load_stimuli() -> list[StimulusRow]:
         print("[DEBUG] Step 1: Requesting Application Default Credentials...")
         credentials, project_id = google.auth.default(scopes=scopes)
         print(f"[DEBUG] Step 1 Success: Got credentials of type {type(credentials)} for project {project_id}")
-
+        print("[DEBUG] Step 1.5: Verifying Runtime Identity...")
+        # Print the exact service account email being used at runtime
+        if hasattr(credentials, "service_account_email"):
+            print(f"[DEBUG] Acting as: {credentials.service_account_email}")
+        else:
+            print("[DEBUG] Could not extract service account email directly from credentials object.")
         print("[DEBUG] Step 2: Authorizing gspread client...")
         client = gspread.authorize(credentials)
         print("[DEBUG] Step 2 Success: Client authorized")
