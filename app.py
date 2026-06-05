@@ -114,7 +114,6 @@ def get_template_csv() -> Path:
 
 def _load_stimuli() -> list[StimulusRow]:
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
-    credentials_source = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     worksheet_name = os.getenv("STIMULUS_GOOGLE_SHEETS_WORKSHEET", "template_spreadsheet")
     
     if not spreadsheet_id:
@@ -124,35 +123,24 @@ def _load_stimuli() -> list[StimulusRow]:
     try:
         import gspread
         import google.auth
-        from google.oauth2.service_account import Credentials
         
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 
-        # 1. Local Development: Try the explicit JSON key first
-        if credentials_source:
-            if credentials_source.startswith("{") and credentials_source.endswith("}"):
-                credentials_info = json.loads(credentials_source)
-            elif credentials_source.endswith(".json") and Path(credentials_source).exists():
-                credentials_info = json.loads(Path(credentials_source).read_text(encoding="utf-8"))
-            else:
-                credentials_info = json.loads(credentials_source)
-                
-            print("Successfully loaded explicit Google Sheets credentials")
-            credentials = Credentials.from_service_account_info(credentials_info, scopes=scopes)
-            
-        # 2. Production: Fallback to GCP Application Default Credentials
-        else:
-            print("No JSON credentials found, attempting GCP native authentication...")
-            credentials, _ = google.auth.default(scopes=scopes)
+        # This natively handles both local (via GOOGLE_APPLICATION_CREDENTIALS) 
+        # and production (via attached GCP Service Account)
+        print("Attempting GCP native authentication (Application Default Credentials)...")
+        credentials, _ = google.auth.default(scopes=scopes)
 
         client = gspread.authorize(credentials)
         worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
-        # ... [rest of your logic remains the same] ...
         worksheet_rows = worksheet.get_all_records()
+        print(f"Successfully loaded {len(worksheet_rows)} rows from Google Sheets. Normalizing stimulus data...")
         rows = [_normalize_stimulus_row(row) for row in worksheet_rows if any((value or "").strip() for value in row.values())]
+        print(f"Loaded {len(rows)} stimulus rows from Google Sheets worksheet '{worksheet_name}'")
         if not rows:
             raise ValueError(f"No stimulus rows found in Google Sheets worksheet {worksheet_name}")
         return rows
+        
     except Exception as e:
         print("Failed to load stimulus from Google Sheets, falling back to local CSV")
         print(f"Error details: {e}")

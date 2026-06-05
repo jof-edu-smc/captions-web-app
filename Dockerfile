@@ -30,6 +30,8 @@ ENV FLASK_ENV=production
 
 # Install Python dependencies
 COPY requirements.txt ./
+COPY template_spreadsheet.csv ./
+COPY submissions.csv ./
 RUN pip install --no-cache-dir -r requirements.txt 
 RUN pip install --no-cache-dir gunicorn
 

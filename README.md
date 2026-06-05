@@ -128,7 +128,7 @@ $ docker build -t acoustic-captions-survey -f Dockerfile .
 2. Start Docker container from Image. 
 ```
 $ docker run -d -p 8080:8080 \
-  -v /Users/jonathanferraro/Documents/Code/captions-web-app/gcp-keys.json:/app/secrets/gcp-keys.json \
+  -v ./app/secrets/gcp-keys.json:/app/secrets/gcp-keys.json \
   --env-file .env \
   --name container-test \
   acoustic-captions-survey
