@@ -124,8 +124,9 @@ def _load_stimuli() -> list[StimulusRow]:
     try:
         import gspread
         from google.oauth2.service_account import Credentials
-        
-        if Path(credentials_source).exists():
+        if credentials_source.startswith("{") and credentials_source.endswith("}"):
+            credentials_info = json.loads(credentials_source)
+        if credentials_source.endswith(".json") and Path(credentials_source).exists():
             credentials_info = json.loads(Path(credentials_source).read_text(encoding="utf-8"))
         else:
             credentials_info = json.loads(credentials_source)
@@ -140,8 +141,9 @@ def _load_stimuli() -> list[StimulusRow]:
         if not rows:
             raise ValueError(f"No stimulus rows found in Google Sheets worksheet {worksheet_name}")
         return rows
-    except Exception:
+    except Exception as e:
         print("Failed to load stimulus from Google Sheets, falling back to local CSV")
+        print(f"Error details: {e}")
         pp.pprint(get_template_csv())
         return get_template_csv()
 
@@ -252,7 +254,27 @@ def generate_presigned_url(bucket_name: str, object_name: str, expiration: int =
         print(f"Error generating presigned URL: {e}")
         traceback.print_exc()
         return ""
-    
+
+def _get_pis_pdf_url() -> str:
+    """Finds the PIS PDF in the GCP bucket and returns a presigned URL."""
+    try:
+        gcp_project = os.getenv("GCP_PROJECT_ID")
+        storage_client = storage.Client(project=gcp_project)
+        bucket = storage_client.bucket("stimuli")
+        
+        # List all files in the 'pdfs/' folder
+        blobs = bucket.list_blobs(prefix="pdfs/")
+        
+        for blob in blobs:
+            # Look for a PDF with 'PIS' in the name
+            if "PIS" in blob.name.upper() and blob.name.lower().endswith(".pdf"):
+                # Expiration set to 1 hour (3600 seconds)
+                return generate_presigned_url("stimuli", blob.name, expiration=3600)
+        return ""
+    except Exception as e:
+        print(f"Error fetching PIS PDF url: {e}")
+        return ""
+
 def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: random.Random) -> dict[str, Any]:
     caption_options = row.caption_texts[:]
     caption_index = rng.randrange(len(caption_options)) if caption_options else 0
@@ -321,7 +343,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         cursor += 1
         
     url = generate_presigned_url("stimuli", "training_stimuli/training.wav", 3000)
-    print(f"Generated presigned URL for training stimulus: {url}")
+    # print(f"Generated presigned URL for training stimulus: {url}")
     training_payload = {
         "training_step_1": {"audio_url": url},
         "training_step_2": {"audio_url": url},
@@ -332,6 +354,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
         "training": training_payload,
         "stimuli": batches,
+        "pis_url": _get_pis_pdf_url(),
     }
 
 def _append_local_row(record: dict[str, Any]) -> None:

@@ -118,6 +118,22 @@ npm run dev
 
 6. Open the Vite URL shown in the terminal, usually `http://localhost:5173`.
 
+
+## Docker Deployment 
+1. Create Docker Image 
+```
+$ docker build -t acoustic-captions-survey -f Dockerfile . 
+``` 
+
+2. Start Docker container from Image. 
+```
+$ docker run -d -p 8080:8080 \
+  -v /Users/jonathanferraro/Documents/Code/captions-web-app/gcp-keys.json:/app/secrets/gcp-keys.json \
+  --env-file .env \
+  --name container-test \
+  acoustic-captions-survey
+```
+
 ## Notes
 
 - The frontend proxies `/api`, `/audio`, and `/files` to the Flask backend during local development.

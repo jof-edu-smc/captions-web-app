@@ -151,22 +151,26 @@ function AudioBlock({ audioUrl, caption, baseline, showCaption = false, showBase
   );
 }
 
-function IntroScreen({ completionUrl, onContinue }) {
+function IntroScreen({ completionUrl, pisUrl, onContinue }) {
   return (
     <ScreenShell
       eyebrow="Welcome"
       title="Acoustic Caption Survey"
       description="Please read the participant information sheet before continuing. This study asks you to listen to short audio clips and respond to three different caption tasks."
       footer={
-        <button className="primary-button" type="button" onClick={onContinue}>
+        <button className="primary-button" type="button" onClick={onContinue} disabled={!pisUrl}>
           Start survey
         </button>
       }
     >
       <div className="intro-grid">
-        <a className="secondary-link" href="/files/PIS-Ferraro-V0.2-25-May-2025.pdf" target="_blank" rel="noreferrer">
-          Open participant information sheet (PDF)
-        </a>
+        {pisUrl ? (
+          <a className="secondary-link" href={pisUrl} target="_blank" rel="noreferrer">
+            Open participant information sheet (PDF)
+          </a>
+        ) : (
+          <span className="context-note">Loading participant information sheet...</span>
+        )}
         {completionUrl ? <p className="context-note">Prolific completion link detected and will be used at the end of the study.</p> : null}
       </div>
     </ScreenShell>
@@ -260,7 +264,7 @@ function Step1Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
   return (
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_1} · ${phaseIndex + 1}/${totalTrials}`}
-      title="Generative Captioning"
+      title="Write a Caption"
       description="Write a new caption from scratch that describes the acoustics of the space. Keep it under 200 characters."
       footer={
         <button className="primary-button" type="button" onClick={() => onSubmit(text)} disabled={!text.trim() || submitting}>
@@ -298,8 +302,8 @@ function Step2Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
   return (
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_2} · ${phaseIndex + 1}/${totalTrials}`}
-      title="Rephrasing / Editing"
-      description="Edit the provided caption if you want to improve it, or leave it unchanged to accept it."
+      title="Rephrasing / Editing already made Captions"
+      description="Edit the provided caption if you want to improve it, or leave it unchanged and submit to accept it."
       footer={
         <button className="primary-button" type="button" onClick={() => onSubmit(text)} disabled={!text.trim() || submitting}>
           Submit &amp; Next
@@ -371,7 +375,7 @@ function TrainingStep1Screen({ trial, onSubmit }) {
   return (
     <ScreenShell
       eyebrow="Training · Step 1"
-      title="Practice: Generative Captioning"
+      title="Practice: Write a Caption"
       description="This is a practice round to familiarize you with the task. Listen to the training audio below and practice writing a descriptive caption from scratch. Keep it under 200 characters."
       footer={
         <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
@@ -383,11 +387,11 @@ function TrainingStep1Screen({ trial, onSubmit }) {
       
       {/* Examples Block: Changed to a div with a standard list */}
       <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
-        <span className="caption-label">Training: Examples of Captions</span>
+        <span className="caption-label">Practice Examples</span>
         <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <li>Unique New York</li>
-          <li>How now Brown Cow</li>
-          <li>Something Something</li>
+          <li>Incredibly echoey with hard surfaces</li>
+          <li>Reflective reverberations with a ringing tone</li>
+          <li>A noisy sounding room that's hard to hear</li>
         </ul>
       </div>
 
@@ -445,6 +449,7 @@ export default function App() {
   const [phase, setPhase] = useState('intro');
   const [stimuli, setStimuli] = useState(null);
   const [training, setTraining] = useState(null);
+  const [pisUrl, setPisUrl] = useState('');
   const [demographics, setDemographics] = useState({ age_range: '', experience_in_audio: '' });
   const [trialIndex, setTrialIndex] = useState({ 
       training_step_1: 0,
@@ -472,6 +477,7 @@ export default function App() {
         const data = await response.json();
         setStimuli(data.stimuli);
         setTraining(data.training);
+        setPisUrl(data.pis_url);
         setStatusMessage('Survey ready.');
       } catch (error) {
         setStatusMessage(error instanceof Error ? error.message : 'Failed to load stimuli.');
@@ -525,6 +531,7 @@ export default function App() {
     return (
       <IntroScreen
         completionUrl={completionUrl}
+        pisUrl={pisUrl} 
         onContinue={() => setPhase('demographics')}
       />
     );
