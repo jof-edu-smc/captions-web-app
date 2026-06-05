@@ -115,6 +115,7 @@ def get_template_csv() -> Path:
 def _load_stimuli() -> list[StimulusRow]:
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
     worksheet_name = os.getenv("STIMULUS_GOOGLE_SHEETS_WORKSHEET", "template_spreadsheet")
+    print(f"Loading stimulus data from Google Sheets with ID: {spreadsheet_id} and worksheet: {worksheet_name}")
     
     if not spreadsheet_id:
         print("Spreadsheet ID missing, loading stimulus from local CSV")
@@ -128,12 +129,22 @@ def _load_stimuli() -> list[StimulusRow]:
 
         # This natively handles both local (via GOOGLE_APPLICATION_CREDENTIALS) 
         # and production (via attached GCP Service Account)
-        print("Attempting GCP native authentication (Application Default Credentials)...")
-        credentials, _ = google.auth.default(scopes=scopes)
+        print("[DEBUG] Step 1: Requesting Application Default Credentials...")
+        credentials, project_id = google.auth.default(scopes=scopes)
+        print(f"[DEBUG] Step 1 Success: Got credentials of type {type(credentials)} for project {project_id}")
 
+        print("[DEBUG] Step 2: Authorizing gspread client...")
         client = gspread.authorize(credentials)
+        print("[DEBUG] Step 2 Success: Client authorized")
+
+        print(f"[DEBUG] Step 3: Attempting to open spreadsheet ID: {spreadsheet_id} and worksheet: {worksheet_name}...")
         worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+        print("[DEBUG] Step 3 Success: Worksheet connected")
+
+        print("[DEBUG] Step 4: Downloading all records...")
         worksheet_rows = worksheet.get_all_records()
+        print(f"[DEBUG] Step 4 Success: Downloaded {len(worksheet_rows)} rows")
+        
         print(f"Successfully loaded {len(worksheet_rows)} rows from Google Sheets. Normalizing stimulus data...")
         rows = [_normalize_stimulus_row(row) for row in worksheet_rows if any((value or "").strip() for value in row.values())]
         print(f"Loaded {len(rows)} stimulus rows from Google Sheets worksheet '{worksheet_name}'")
