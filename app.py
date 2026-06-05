@@ -116,26 +116,38 @@ def _load_stimuli() -> list[StimulusRow]:
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
     credentials_source = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     worksheet_name = os.getenv("STIMULUS_GOOGLE_SHEETS_WORKSHEET", "template_spreadsheet")
-    print(f"Loading stimulus with spreadsheet_id={spreadsheet_id}, credentials_source={'set' if credentials_source else 'not set'}, worksheet_name={worksheet_name}")
-    if not spreadsheet_id or not credentials_source:
-        print("Google Sheets credentials not fully configured, loading stimulus from local CSV")
-        pp.pprint(get_template_csv())
+    
+    if not spreadsheet_id:
+        print("Spreadsheet ID missing, loading stimulus from local CSV")
         return get_template_csv()
+
     try:
         import gspread
+        import google.auth
         from google.oauth2.service_account import Credentials
-        if credentials_source.startswith("{") and credentials_source.endswith("}"):
-            credentials_info = json.loads(credentials_source)
-        if credentials_source.endswith(".json") and Path(credentials_source).exists():
-            credentials_info = json.loads(Path(credentials_source).read_text(encoding="utf-8"))
-        else:
-            credentials_info = json.loads(credentials_source)
-            
-        print("Successfully loaded Google Sheets credentials")
+        
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        credentials = Credentials.from_service_account_info(credentials_info, scopes=scopes)
+
+        # 1. Local Development: Try the explicit JSON key first
+        if credentials_source:
+            if credentials_source.startswith("{") and credentials_source.endswith("}"):
+                credentials_info = json.loads(credentials_source)
+            elif credentials_source.endswith(".json") and Path(credentials_source).exists():
+                credentials_info = json.loads(Path(credentials_source).read_text(encoding="utf-8"))
+            else:
+                credentials_info = json.loads(credentials_source)
+                
+            print("Successfully loaded explicit Google Sheets credentials")
+            credentials = Credentials.from_service_account_info(credentials_info, scopes=scopes)
+            
+        # 2. Production: Fallback to GCP Application Default Credentials
+        else:
+            print("No JSON credentials found, attempting GCP native authentication...")
+            credentials, _ = google.auth.default(scopes=scopes)
+
         client = gspread.authorize(credentials)
         worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+        # ... [rest of your logic remains the same] ...
         worksheet_rows = worksheet.get_all_records()
         rows = [_normalize_stimulus_row(row) for row in worksheet_rows if any((value or "").strip() for value in row.values())]
         if not rows:
