@@ -137,9 +137,16 @@ def _load_stimuli() -> list[StimulusRow]:
         client = gspread.authorize(credentials)
         print("[DEBUG] Step 2 Success: Client authorized")
 
-        print(f"[DEBUG] Step 3: Attempting to open spreadsheet ID: {spreadsheet_id} and worksheet: {worksheet_name}...")
-        worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
-        print("[DEBUG] Step 3 Success: Worksheet connected")
+        print(f"[DEBUG] Step 3a: Target Spreadsheet ID length: {len(spreadsheet_id) if spreadsheet_id else 0}")
+        print(f"[DEBUG] Step 3a: Target Worksheet Name: '{worksheet_name}'")
+        
+        # Split the chain to catch the exact failure point
+        spreadsheet = client.open_by_key(spreadsheet_id)
+        print("[DEBUG] Step 3a Success: Connected to the overall Spreadsheet file")
+
+        print("[DEBUG] Step 3b: Attempting to locate the specific worksheet tab...")
+        worksheet = spreadsheet.worksheet(worksheet_name)
+        print("[DEBUG] Step 3b Success: Worksheet tab located")
 
         print("[DEBUG] Step 4: Downloading all records...")
         worksheet_rows = worksheet.get_all_records()
