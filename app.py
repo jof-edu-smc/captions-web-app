@@ -277,14 +277,13 @@ def generate_presigned_url(bucket_name: str, object_name: str, expiration: int =
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_name)
         
-        # Hardcode your compute service account email here, or pass it via a standard ENV var
-        sa_email = "1234567890-compute@developer.gserviceaccount.com" 
+        sa_email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
 
         url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(seconds=expiration),
             method="GET",
-            service_account_email=sa_email # <-- This forces the IAM API signing method
+            service_account_email=sa_email 
         )
         return url
     except Exception as e:
