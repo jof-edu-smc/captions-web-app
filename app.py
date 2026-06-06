@@ -267,26 +267,28 @@ def generate_presigned_url(bucket_name: str, object_name: str, expiration: int =
         str: Returns a string of the Signed URL. If error, returns an empty string.
     """
     try:
-        import os
+        gcp_project = os.getenv("GCP_PROJECT_ID")
+        
         import google.auth
-        from datetime import timedelta
+        from google.auth.transport import requests
         
-        # This will automatically pick up the key file from the Secret Manager volume
-        credentials, project_id = google.auth.default()
+        credentials, _ = google.auth.default()
+        credentials.refresh(requests.Request())
+        print(f"Obtained credentials of type {credentials} for project {gcp_project}")
         
-        # Fallback to env var if project_id isn't in the key file
-        if not project_id:
-            project_id = os.getenv("GCP_PROJECT_ID")
-            
-        storage_client = storage.Client(project=project_id, credentials=credentials)
+        storage_client = storage.Client(project=gcp_project, credentials=credentials)
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_name)
-        
-        # Standard signing using the injected private key
+        print(f"SA EMAIL: {os.getenv('GCP_SERVICE_ACCOUNT_EMAIL')}")
+        # sa_email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
+        sa_email = "972036545446-compute@developer.gserviceaccount.com" 
+
         url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(seconds=expiration),
-            method="GET"
+            method="GET",
+            service_account_email=sa_email,
+            access_token=credentials.token
         )
         return url
     except Exception as e:
