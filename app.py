@@ -269,21 +269,24 @@ def generate_presigned_url(bucket_name: str, object_name: str, expiration: int =
     try:
         gcp_project = os.getenv("GCP_PROJECT_ID")
         
-        # Grab the default credentials
         import google.auth
+        from google.auth.transport import requests
+        
         credentials, _ = google.auth.default()
+        credentials.refresh(requests.Request())
         
         storage_client = storage.Client(project=gcp_project, credentials=credentials)
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_name)
         
-        sa_email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
+        sa_email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL") or credentials.service_account_email
 
         url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(seconds=expiration),
             method="GET",
-            service_account_email=sa_email 
+            service_account_email=sa_email,
+            access_token=credentials.token  # <-- This is the magic fix
         )
         return url
     except Exception as e:
