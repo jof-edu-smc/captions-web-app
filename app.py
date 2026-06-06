@@ -256,25 +256,40 @@ def _pick_caption_for_step2_or_3(audio_file: str, row: StimulusRow, weights: dic
 
 
 def generate_presigned_url(bucket_name: str, object_name: str, expiration: int = 900) -> str:
-    """Generates a secure presigned URL for an object using a dedicated service account."""
+    """Generates a presigned URL for a GCS object using IAM API signing method.
+
+    Args:
+        bucket_name (str): Name of GCS Bucket
+        object_name (str): Path to the object within the bucket (e.g., "folder/audio.mp3")
+        expiration (int, optional): Time of expiration from creation. Defaults to 900.
+
+    Returns:
+        str: Returns a string of the Signed URL. If error, returns an empty string.
+    """
     try:
         gcp_project = os.getenv("GCP_PROJECT_ID")
         
-        # Initialize the storage client targeting your project
-        storage_client = storage.Client(project=gcp_project)
+        # Grab the default credentials
+        import google.auth
+        credentials, _ = google.auth.default()
         
+        storage_client = storage.Client(project=gcp_project, credentials=credentials)
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_name)
         
-        # Generate the signature. The client library handles the key signature logic automatically.
+        # Hardcode your compute service account email here, or pass it via a standard ENV var
+        sa_email = "1234567890-compute@developer.gserviceaccount.com" 
+
         url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(seconds=expiration),
             method="GET",
+            service_account_email=sa_email # <-- This forces the IAM API signing method
         )
         return url
     except Exception as e:
         print(f"Error generating presigned URL: {e}")
+        import traceback
         traceback.print_exc()
         return ""
 

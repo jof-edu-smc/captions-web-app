@@ -11,6 +11,7 @@ COPY package*.json ./
 RUN npm ci
 
 # Copy the frontend configuration and source code
+COPY public/ /public
 COPY vite.config.js index.html ./
 COPY src/ ./src/
 
@@ -30,14 +31,14 @@ ENV FLASK_ENV=production
 
 # Install Python dependencies
 COPY requirements.txt ./
-COPY template_spreadsheet.csv ./
-COPY submissions.csv ./
+
 RUN pip install --no-cache-dir -r requirements.txt 
 RUN pip install --no-cache-dir gunicorn
 
 # Copy backend files and application data
 COPY app.py ./
 COPY template_spreadsheet.csv ./
+COPY submissions.csv ./
 
 # Copy the compiled static frontend assets from Stage 1 into the 'static' folder
 COPY --from=frontend-builder /app/dist/ /app/static/
