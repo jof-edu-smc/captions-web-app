@@ -387,12 +387,11 @@ def _append_local_row(record: dict[str, Any]) -> None:
 
 def append_submission_row(record: dict[str, Any]) -> None:
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
-    credentials_source = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     worksheet_name = os.getenv("SUBMISSIONS_WORKSHEET")
     
     print(f"Attempting to append submission row to Google Sheets with ID: {spreadsheet_id} and worksheet: {worksheet_name}")
 
-    if not spreadsheet_id or not credentials_source:
+    if not spreadsheet_id or not worksheet_name:
         print(f"Google Sheets configuration missing (ID: {spreadsheet_id}, Credentials: {'present' if credentials_source else 'missing'}), appending to local CSV instead")
         _append_local_row(record)
         return
@@ -407,9 +406,9 @@ def append_submission_row(record: dict[str, Any]) -> None:
         client = gspread.authorize(credentials)
         worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
         worksheet.append_row([record.get(key, "") for key in record.keys()])
-    except Exception:
+    except Exception as e:
         _append_local_row(record)
-        raise ValueError(f"Failed to append row to Google Sheets, falling back to local CSV")
+        raise RuntimeError(f"Failed to append submission to Google Sheets, stored locally instead. Error: {e}") 
         
 
 # ROUTE HANDLERS 
