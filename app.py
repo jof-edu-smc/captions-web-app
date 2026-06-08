@@ -127,35 +127,12 @@ def _load_stimuli() -> list[StimulusRow]:
         
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 
-        # This natively handles both local (via GOOGLE_APPLICATION_CREDENTIALS) 
-        # and production (via attached GCP Service Account)
-        print("[DEBUG] Step 1: Requesting Application Default Credentials...")
-        credentials, project_id = google.auth.default(scopes=scopes)
-        print(f"[DEBUG] Step 1 Success: Got credentials of type {type(credentials)} for project {project_id}")
-        print("[DEBUG] Step 1.5: Verifying Runtime Identity...")
-        # Print the exact service account email being used at runtime
-        if hasattr(credentials, "service_account_email"):
-            print(f"[DEBUG] Acting as: {credentials.service_account_email}")
-        else:
-            print("[DEBUG] Could not extract service account email directly from credentials object.")
-        print("[DEBUG] Step 2: Authorizing gspread client...")
+        credentials, _ = google.auth.default(scopes=scopes)
         client = gspread.authorize(credentials)
-        print("[DEBUG] Step 2 Success: Client authorized")
-
-        print(f"[DEBUG] Step 3a: Target Spreadsheet ID length: {len(spreadsheet_id) if spreadsheet_id else 0}")
-        print(f"[DEBUG] Step 3a: Target Worksheet Name: '{worksheet_name}'")
         
-        # Split the chain to catch the exact failure point
         spreadsheet = client.open_by_key(spreadsheet_id)
-        print("[DEBUG] Step 3a Success: Connected to the overall Spreadsheet file")
-
-        print("[DEBUG] Step 3b: Attempting to locate the specific worksheet tab...")
         worksheet = spreadsheet.worksheet(worksheet_name)
-        print("[DEBUG] Step 3b Success: Worksheet tab located")
-
-        print("[DEBUG] Step 4: Downloading all records...")
         worksheet_rows = worksheet.get_all_records()
-        print(f"[DEBUG] Step 4 Success: Downloaded {len(worksheet_rows)} rows")
         
         print(f"Successfully loaded {len(worksheet_rows)} rows from Google Sheets. Normalizing stimulus data...")
         rows = [_normalize_stimulus_row(row) for row in worksheet_rows if any((value or "").strip() for value in row.values())]
@@ -419,19 +396,16 @@ def append_submission_row(record: dict[str, Any]) -> None:
 
     try:
         import gspread
-        from google.oauth2.service_account import Credentials
-
-        if Path(credentials_source).exists():
-            credentials_info = json.loads(Path(credentials_source).read_text(encoding="utf-8"))
-        else:
-            credentials_info = json.loads(credentials_source)
-
+        import google.auth
+        
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        credentials = Credentials.from_service_account_info(credentials_info, scopes=scopes)
+
+        credentials, _ = google.auth.default(scopes=scopes)
         client = gspread.authorize(credentials)
         worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
         worksheet.append_row([record.get(key, "") for key in record.keys()])
     except Exception:
+        print(f"Failed to append row to Google Sheets, falling back to local CSV")
         _append_local_row(record)
 
 # ROUTE HANDLERS 
@@ -467,6 +441,7 @@ def submit_response() -> Any:
     if phase not in {"step_1", "step_2", "step_3"}:
         return jsonify({"error": "phase must be one of step_1, step_2, or step_3"}), 400
 
+    print(f"Received submission for phase: {phase}")
     participant_context = payload.get("participant_context") or {}
     stimulus = payload.get("stimulus") or {}
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -494,6 +469,7 @@ def submit_response() -> Any:
         "accuracy_rating": _clean_value(payload.get("accuracy_rating")),
     }
 
+    # print(f"Prepared record for submission: {record}")
     if phase == "step_1" and not (record["generated_text"] or record["raw_text"] or record["response_text"]):
         return jsonify({"error": "step_1 submissions require generated_text, raw_text, or response_text"}), 400
     if phase == "step_2" and not (record["edited_text"] or record["response_text"]):
@@ -502,7 +478,7 @@ def submit_response() -> Any:
         return jsonify({"error": "step_3 submissions require grammar_rating and accuracy_rating"}), 400
 
     append_submission_row(record)
-
+    print(f"Successfully recorded submission for phase {phase} at {timestamp}")
     return jsonify({
         "ok": True,
         "phase": phase,
