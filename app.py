@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import csv
-import json
 import os
 import random
 import pprint
-import traceback
 from google.cloud import storage
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -250,13 +248,13 @@ def generate_presigned_url(bucket_name: str, object_name: str, expiration: int =
         from google.auth.transport import requests
         
         credentials, _ = google.auth.default()
-        credentials.refresh(requests.Request())
-        print(f"Obtained credentials of type {credentials} for project {gcp_project}")
+        # credentials.refresh(requests.Request())
+        # print(f"Obtained credentials of type {credentials} for project {gcp_project}")
         
         storage_client = storage.Client(project=gcp_project, credentials=credentials)
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_name)
-        print(f"SA EMAIL: {os.getenv('GCP_SERVICE_ACCOUNT_EMAIL')}")
+        # print(f"SA EMAIL: {os.getenv('GCP_SERVICE_ACCOUNT_EMAIL')}")
         # sa_email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
         sa_email = "972036545446-compute@developer.gserviceaccount.com" 
 
@@ -392,7 +390,7 @@ def append_submission_row(record: dict[str, Any]) -> None:
     print(f"Attempting to append submission row to Google Sheets with ID: {spreadsheet_id} and worksheet: {worksheet_name}")
 
     if not spreadsheet_id or not worksheet_name:
-        print(f"Google Sheets configuration missing (ID: {spreadsheet_id}, Credentials: {'present' if credentials_source else 'missing'}), appending to local CSV instead")
+        print(f"Google Sheets configuration missing (ID: {spreadsheet_id}), appending to local CSV instead")
         _append_local_row(record)
         return
 

@@ -204,11 +204,19 @@ h1 {
   background: var(--accent-soft);
 }
 
+.likert-scale {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)); /* Changed from 5 to 4 */
+  gap: 12px;
+}
+
 .likert-labels {
-  display: flex;
-  justify-content: space-between;
+  display: grid; /* Changed from flex to grid */
+  grid-template-columns: repeat(4, minmax(0, 1fr)); /* Matches the scale exactly */
+  gap: 12px;
   color: var(--muted);
   font-size: 0.9rem;
+  text-align: center; /* Centers the text under the radio buttons */
 }
 
 .text-area-shell {

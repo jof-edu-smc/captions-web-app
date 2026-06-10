@@ -61,7 +61,7 @@ function ChipGroup({ label, options, value, onChange, hint }) {
 }
 
 function LikertScale({ value, onChange, name, ariaLabel, lowLabel, middleLabel, highLabel }) {
-  const labels = ['1', '2', '3', '4', '5'];
+  const labels = ['1', '2', '3', '4']; // Set to 4 because of Lipping Et al. 
 
   return (
     <div className="likert-shell">
@@ -80,9 +80,9 @@ function LikertScale({ value, onChange, name, ariaLabel, lowLabel, middleLabel, 
         ))}
       </div>
       <div className="likert-labels">
-        <span>{lowLabel}</span>
-        <span>{middleLabel}</span>
-        <span>{highLabel}</span>
+        <span style={{ gridColumn: 1 }}>{lowLabel}</span>
+        {/* Force the high label into the 4th slot so it aligns perfectly */}
+        <span style={{ gridColumn: 4 }}>{highLabel}</span> 
       </div>
     </div>
   );
@@ -95,9 +95,9 @@ function GrammarScale({ value, onChange }) {
       onChange={onChange}
       name="grammar"
       ariaLabel="Grammar correctness rating"
-      lowLabel="Totally Incorrect"
-      middleLabel="Average"
-      highLabel="Perfect"
+      lowLabel="Bad"
+      middleLabel="OK"
+      highLabel="Good"
     />
   );
 }
@@ -109,9 +109,9 @@ function AccuracyScale({ value, onChange }) {
       onChange={onChange}
       name="accuracy"
       ariaLabel="Accuracy of the description rating"
-      lowLabel="Very inaccurate"
-      middleLabel="Neutral"
-      highLabel="Very accurate"
+      lowLabel="Bad"
+      middleLabel="OK"
+      highLabel="Good"
     />
   );
 }
@@ -156,10 +156,10 @@ function IntroScreen({ completionUrl, pisUrl, onContinue }) {
     <ScreenShell
       eyebrow="Welcome"
       title="Acoustic Caption Survey"
-      description="Please read the participant information sheet before continuing. This study asks you to listen to short audio clips and respond to three different caption tasks."
+      description="Please download & read the participant information sheet before continuing. This study asks you to listen to short audio clips and respond to three different caption tasks."
       footer={
         <button className="primary-button" type="button" onClick={onContinue} disabled={!pisUrl}>
-          Start survey
+          Next
         </button>
       }
     >
@@ -169,7 +169,7 @@ function IntroScreen({ completionUrl, pisUrl, onContinue }) {
             Open participant information sheet (PDF)
           </a>
         ) : (
-          <span className="context-note">Loading participant information sheet...</span>
+          <span className="context-note">Loading the Study...</span>
         )}
         {completionUrl ? <p className="context-note">Prolific completion link detected and will be used at the end of the study.</p> : null}
       </div>
@@ -351,14 +351,14 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
         <div className="field-group">
           <div className="field-heading">
             <h2>Grammar Correctness</h2>
-            <p>How grammatical is the caption?</p>
+            <p>Rate the grammar of the caption.</p>
           </div>
           <GrammarScale value={grammarRating} onChange={setGrammarRating} />
         </div>
         <div className="field-group">
           <div className="field-heading">
             <h2>Accuracy of the Description</h2>
-            <p>How accurately does the caption describe the acoustics?</p>
+            <p>How accurately does the caption describe the space the performances are located in?</p>
           </div>
           <AccuracyScale value={accuracyRating} onChange={setAccuracyRating} />
         </div>
@@ -367,7 +367,41 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
   );
 }
 
-function TrainingStep1Screen({ trial, onSubmit }) {
+function HeadphoneAdjustmentScreen({ trial, onSubmit, onGoBack }) {
+  return (
+    <ScreenShell
+      eyebrow="Headphone Calibration"
+      title="Adjust Headphone Volume"
+      description="Please press play (You can play it as many times as you'd like) on the audio below, listen, and adjust your headphones to a comfortable volume. It is best to start low and increase your headphone volume slowly."
+      footer={
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
+          <button 
+            type="button" 
+            onClick={onGoBack} 
+            style={{ 
+              background: 'transparent', 
+              border: '2px solid var(--accent)', 
+              color: 'var(--accent)', 
+              padding: '0 22px', 
+              borderRadius: '999px', 
+              cursor: 'pointer', 
+              fontWeight: '700' 
+            }}
+          >
+            Back
+          </button>
+          <button className="primary-button" type="button" onClick={onSubmit}>
+            Start Training Exercises
+          </button>
+        </div>
+      }
+    >
+      <AudioBlock audioUrl={trial?.audio_url} />
+    </ScreenShell>
+  );
+}
+
+function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
   const [text, setText] = useState('');
   const remaining = 200 - text.length;
   const baseline = "The room sounds small and dry, with very little reverberation.";
@@ -375,23 +409,39 @@ function TrainingStep1Screen({ trial, onSubmit }) {
   return (
     <ScreenShell
       eyebrow="Training · Step 1"
-      title="Practice: Write a Caption"
+      title="Practice: Generative Captioning"
       description="This is a practice round to familiarize you with the task. Listen to the training audio below and practice writing a descriptive caption from scratch. Keep it under 200 characters."
       footer={
-        <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
-          Continue to Step 2 Practice
-        </button>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
+          <button 
+            type="button" 
+            onClick={onGoBack} 
+            style={{ 
+              background: 'transparent', 
+              border: '2px solid var(--accent)', 
+              color: 'var(--accent)', 
+              padding: '0 22px', 
+              borderRadius: '999px', 
+              cursor: 'pointer', 
+              fontWeight: '700' 
+            }}
+          >
+            Back
+          </button>
+          <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
+            Continue to Step 2 Practice
+          </button>
+        </div>
       }
     >
-      <AudioBlock audioUrl={trial.audio_url} baseline={baseline} />
+      <AudioBlock audioUrl={trial?.audio_url} baseline={baseline} />
       
-      {/* Examples Block: Changed to a div with a standard list */}
       <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
-        <span className="caption-label">Practice Examples</span>
+        <span className="caption-label">Training: Examples of Captions</span>
         <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <li>Incredibly echoey with hard surfaces</li>
-          <li>Reflective reverberations with a ringing tone</li>
-          <li>A noisy sounding room that's hard to hear</li>
+          <li>Unique New York</li>
+          <li>How now Brown Cow</li>
+          <li>Something Something</li>
         </ul>
       </div>
 
@@ -410,8 +460,7 @@ function TrainingStep1Screen({ trial, onSubmit }) {
   );
 }
 
-function TrainingStep2Screen({ trial, onSubmit }) {
-  // Hardcoded baseline for the training example
+function TrainingStep2Screen({ trial, onSubmit, onGoBack }) {
   const baseline = "The room sounds small and dry, with very little reverberation.";
   const [text, setText] = useState(baseline);
 
@@ -421,9 +470,26 @@ function TrainingStep2Screen({ trial, onSubmit }) {
       title="Practice: Rephrasing / Editing"
       description="Now practice the editing step. Edit the provided baseline caption if you want to improve it, or leave it unchanged."
       footer={
-        <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
-          Start Actual Survey
-        </button>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
+          <button 
+            type="button" 
+            onClick={onGoBack} 
+            style={{ 
+              background: 'transparent', 
+              border: '2px solid var(--accent)', 
+              color: 'var(--accent)', 
+              padding: '0 22px', 
+              borderRadius: '999px', 
+              cursor: 'pointer', 
+              fontWeight: '700' 
+            }}
+          >
+            Back to Step 1
+          </button>
+          <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
+            Start Actual Survey
+          </button>
+        </div>
       }
     >
       <div className="caption-box" style={{ marginBottom: '10px' }}>
@@ -434,12 +500,44 @@ function TrainingStep2Screen({ trial, onSubmit }) {
           <li>It is a valid option to leave the caption unedited and then click the Continue button in the bottom right.</li>
         </ul>
       </div>
-      <AudioBlock audioUrl={trial.audio_url} baseline={baseline} showBaseline />
+      <AudioBlock audioUrl={trial?.audio_url} baseline={baseline} showBaseline />
       <label className="text-area-shell" style={{ paddingTop: '5px' }}>
         <span className="caption-label">Edit the caption</span>
         <textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} />
       </label>
     </ScreenShell>
+  );
+}
+
+function TrainingCompleteScreen({ onProceed, onGoBack }) {
+  return (
+    <ScreenShell
+      eyebrow="Training Complete"
+      title="Ready to begin the actual survey?"
+      description="You have finished the practice rounds. The next screens will use the real audio dataset, and your responses will be recorded. Are you sure you are ready to proceed?"
+      footer={
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
+          <button 
+            type="button" 
+            onClick={onGoBack} 
+            style={{ 
+              background: 'transparent', 
+              border: '2px solid var(--accent)', 
+              color: 'var(--accent)', 
+              padding: '0 22px', 
+              borderRadius: '999px', 
+              cursor: 'pointer', 
+              fontWeight: '700' 
+            }}
+          >
+            Wait, let me review
+          </button>
+          <button className="primary-button" type="button" onClick={onProceed}>
+            Yes, start actual survey
+          </button>
+        </div>
+      }
+    />
   );
 }
 
@@ -547,9 +645,20 @@ export default function App() {
             setPhase('blocked');
             return;
           }
-          // Redirect to training instead of step_1
-          setPhase('training_step_1'); 
+          // Redirect to calibration instead of training
+          setPhase('headphone_calibration'); 
         }}
+      />
+    );
+  }
+
+  if (phase === 'headphone_calibration') {
+    const trial = training?.training_step_1;
+    return (
+      <HeadphoneAdjustmentScreen 
+        trial={trial}
+        onSubmit={() => setPhase('training_step_1')} 
+        onGoBack={() => setPhase('demographics')} 
       />
     );
   }
@@ -560,11 +669,11 @@ export default function App() {
 
   if (phase === 'training_step_1') {
     const trial = training?.training_step_1;
-    console.log(trial)
     return (
       <TrainingStep1Screen 
         trial={trial}
-        onSubmit={() => setPhase('training_step_2')} 
+        onSubmit={() => setPhase('training_step_2')}
+        onGoBack={() => setPhase('headphone_calibration')} 
       />
     );
   }
@@ -574,7 +683,17 @@ export default function App() {
     return (
       <TrainingStep2Screen 
         trial={trial}
-        onSubmit={() => setPhase('step_1')} 
+        onSubmit={() => setPhase('training_complete')} 
+        onGoBack={() => setPhase('training_step_1')} // Returns the user to practice step 1
+      />
+    );
+  }
+
+  if (phase === 'training_complete') {
+    return (
+      <TrainingCompleteScreen 
+        onProceed={() => setPhase('step_1')} 
+        onGoBack={() => setPhase('training_step_2')} 
       />
     );
   }
