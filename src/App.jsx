@@ -17,10 +17,27 @@ const NEXT_PHASE = {
 
 function parseQueryParams() {
   const params = new URLSearchParams(window.location.search);
+  
+  // 1. Attempt to grab the Prolific-injected session ID first
+  let sessionId = params.get('session_id');
+
+  // 2. Fallback for local testing or non-Prolific traffic
+  if (!sessionId) {
+    // Check if we already generated one for this specific browser tab
+    sessionId = sessionStorage.getItem('local_session_id');
+    
+    // If not, generate a brand new UUID and save it to the browser
+    if (!sessionId) {
+      sessionId = crypto.randomUUID(); 
+      sessionStorage.setItem('local_session_id', sessionId);
+    }
+  }
+
+  // 3. Provide safe fallback strings for the other IDs so the database doesn't log blanks
   return {
-    prolific_id: params.get('prolific_id') || '',
-    study_id: params.get('study_id') || '',
-    session_id: params.get('session_id') || '',
+    prolific_id: params.get('prolific_id') || `local_user_${crypto.randomUUID().slice(0, 8)}`,
+    study_id: params.get('study_id') || 'pilot_study_participant',
+    session_id: sessionId,
     completion_url: params.get('completion_url') || params.get('redirect_url') || '',
     completion_code: params.get('completion_code') || '',
   };
@@ -130,17 +147,44 @@ function ScreenShell({ eyebrow, title, description, children, footer }) {
   );
 }
 
-function AudioBlock({ audioUrl, caption, baseline, showCaption = false, showBaseline = false }) {
-  
+function AudioBlock({ trial, caption, baseline, showCaption = false, showBaseline = false }) {
+  // Gracefully handle undefined trials during loading states
+  if (!trial) return null;
+
   return (
-    <section className="trial-block">
-      <audio controls src={audioUrl} className="audio-player" />
+    <section className="trial-block stack">
+      <div className="audio-players-grid" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '16px' }}>
+        
+        {trial.speech_file_url && (
+          <div className="audio-row">
+            <span className="caption-label">Speech Reference</span>
+            <audio controls src={trial.speech_file_url} className="audio-player" style={{ width: '100%' }} />
+          </div>
+        )}
+
+        {trial.music_file_url && (
+          <div className="audio-row">
+            <span className="caption-label">Music Reference</span>
+            <audio controls src={trial.music_file_url} className="audio-player" style={{ width: '100%' }} />
+          </div>
+        )}
+
+        {trial.clap_file_url && (
+          <div className="audio-row">
+            <span className="caption-label">CLAP Reference</span>
+            <audio controls src={trial.clap_file_url} className="audio-player" style={{ width: '100%' }} />
+          </div>
+        )}
+
+      </div>
+
       {showCaption && caption ? (
         <div className="caption-box">
           <span className="caption-label">Caption</span>
           <p>{caption}</p>
         </div>
       ) : null}
+      
       {showBaseline && baseline ? (
         <div className="caption-box caption-box-muted">
           <span className="caption-label">Baseline caption</span>
@@ -259,27 +303,27 @@ function Step1Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
     return null;
   }
 
-  const remaining = 200 - text.length;
+  const remaining = 250 - text.length;
 
   return (
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_1} · ${phaseIndex + 1}/${totalTrials}`}
-      title="Write a Caption"
-      description="Write a new caption from scratch that describes the acoustics of the space. Keep it under 200 characters."
+      title="Write an Original Caption"
+      description="Listen to the separate recordings of three different sources in the same physical space. Write a new caption from scratch that describes the acoustics of the space they are in. Keep it under 250 characters. "
       footer={
         <button className="primary-button" type="button" onClick={() => onSubmit(text)} disabled={!text.trim() || submitting}>
           Submit &amp; Next
         </button>
       }
     >
-      <AudioBlock audioUrl={trial.audio_url} />
+      <AudioBlock trial={trial} />
       <label className="text-area-shell">
-        <span className="caption-label">Original caption</span>
+        <span className="caption-label">Create Caption</span>
         <textarea
           value={text}
           onChange={(event) => setText(event.target.value.slice(0, 200))}
-          rows={6}
-          maxLength={200}
+          rows={3}
+          maxLength={250}
           placeholder="Type your caption here..."
         />
       </label>
@@ -289,14 +333,15 @@ function Step1Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
 }
 
 function Step2Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
-  const [text, setText] = useState(trial?.baseline_caption || '');
+  const baseline = trial?.baseline_caption;
+  const [text, setText] = useState(baseline);
 
   useEffect(() => {
-    setText(trial?.baseline_caption || '');
+    setText(baseline || '');
   }, [trial?.trial_index]);
 
   if (!trial) {
-    return null;
+    return null;  
   }
 
   return (
@@ -310,10 +355,10 @@ function Step2Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
         </button>
       }
     >
-      <AudioBlock audioUrl={trial.audio_url} baseline={trial.baseline_caption} showBaseline />
+      <AudioBlock trial={trial} baseline={baseline} showBaseline />
       <label className="text-area-shell" padding_top="5px">
         <span className="caption-label">Edit the caption</span>
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} />
+        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} />
       </label>
     </ScreenShell>
   );
@@ -346,7 +391,7 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
         </button>
       }
     >
-      <AudioBlock audioUrl={trial.audio_url} baseline={trial.baseline_caption} showBaseline />
+      <AudioBlock trial={trial} baseline={trial.baseline_caption} showBaseline />
       <section className="stack">
         <div className="field-group">
           <div className="field-heading">
@@ -368,11 +413,13 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
 }
 
 function HeadphoneAdjustmentScreen({ trial, onSubmit, onGoBack }) {
+  console.log("HELLO?")
+  console.log("Trial Body:", trial)
   return (
     <ScreenShell
       eyebrow="Headphone Calibration"
       title="Adjust Headphone Volume"
-      description="Please press play (You can play it as many times as you'd like) on the audio below, listen, and adjust your headphones to a comfortable volume. It is best to start low and increase your headphone volume slowly."
+      description="Starting with your headphone volume at a low level, listen to all three references and adjust your headphone volume to a comfortable but clear level. Play the files as many times as you like."
       footer={
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
           <button 
@@ -396,21 +443,25 @@ function HeadphoneAdjustmentScreen({ trial, onSubmit, onGoBack }) {
         </div>
       }
     >
-      <AudioBlock audioUrl={trial?.audio_url} />
+      <AudioBlock trial={{ 
+        speech_file_url: trial?.speech_file_url,  
+        music_file_url: trial?.music_file_url,
+        clap_file_url: trial?.clap_file_url
+      }} />
     </ScreenShell>
   );
 }
 
 function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
   const [text, setText] = useState('');
-  const remaining = 200 - text.length;
-  const baseline = "The room sounds small and dry, with very little reverberation.";
+  const remaining = 250 - text.length;
+  const baseline = trial?.training_baseline_caption;
 
   return (
     <ScreenShell
       eyebrow="Training · Step 1"
       title="Practice: Generative Captioning"
-      description="This is a practice round to familiarize you with the task. Listen to the training audio below and practice writing a descriptive caption from scratch. Keep it under 200 characters."
+      description="Now, you will see those same three sounds recorded in the same room are playable. But below, there is a text box for you to type in a caption. This caption is meant to describe the room from the three recordings. All 3 recordings are from the same room, but the sources playing in that room are different. Using the examples, write a caption that effectively describes what the room sounds like and how it affects the source of the sound. "
       footer={
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
           <button 
@@ -434,14 +485,18 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
         </div>
       }
     >
-      <AudioBlock audioUrl={trial?.audio_url} baseline={baseline} />
+      <AudioBlock trial={{ 
+        speech_file_url: trial?.speech_file_url,  
+        music_file_url: trial?.music_file_url,
+        clap_file_url: trial?.clap_file_url
+      }} />
       
       <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
         <span className="caption-label">Training: Examples of Captions</span>
         <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <li>Unique New York</li>
-          <li>How now Brown Cow</li>
-          <li>Something Something</li>
+          <li>A lively, ringing quality fills the air</li>
+          <li>A tightly reflective and vibrant space</li>
+          <li>Sound spreads evenly and fades smoothly</li>
         </ul>
       </div>
 
@@ -461,14 +516,14 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
 }
 
 function TrainingStep2Screen({ trial, onSubmit, onGoBack }) {
-  const baseline = "The room sounds small and dry, with very little reverberation.";
+  const baseline = trial?.training_baseline_caption;
   const [text, setText] = useState(baseline);
 
   return (
     <ScreenShell
       eyebrow="Training · Step 2"
       title="Practice: Rephrasing / Editing"
-      description="Now practice the editing step. Edit the provided baseline caption if you want to improve it, or leave it unchanged."
+      description="In the second phase of this study, we will ask you to listen to those three audio clips, read a caption and make any corrections IF necessary. If you find that the caption provided as a baseline is in fact perfect. Then you can click the Next button and move on to the next sample in the survey."
       footer={
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
           <button 
@@ -492,18 +547,16 @@ function TrainingStep2Screen({ trial, onSubmit, onGoBack }) {
         </div>
       }
     >
-      <div className="caption-box" style={{ marginBottom: '10px' }}>
-        <span className="caption-label">Training: Editing the Caption</span>
-        <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <li>In questions like this, you will be asked to listen to the audio presented and review the caption paired with that audio.</li>
-          <li>You can edit the caption should find any Grammatical errors, clarity, or accuracy issues.</li>
-          <li>It is a valid option to leave the caption unedited and then click the Continue button in the bottom right.</li>
-        </ul>
-      </div>
-      <AudioBlock audioUrl={trial?.audio_url} baseline={baseline} showBaseline />
+      
+      <AudioBlock trial={{ 
+          speech_file_url: trial?.speech_file_url,  
+          music_file_url: trial?.music_file_url,
+          clap_file_url: trial?.clap_file_url
+        }} baseline={baseline} showBaseline />
+      
       <label className="text-area-shell" style={{ paddingTop: '5px' }}>
         <span className="caption-label">Edit the caption</span>
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} />
+        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={2} />
       </label>
     </ScreenShell>
   );
@@ -595,7 +648,6 @@ export default function App() {
         },
         body: JSON.stringify({
           phase: phaseName,
-          batch_id: stimuli?.batch_id || '',
           trial_index: stimulus?.trial_index ?? 0,
           participant_context: {
             ...prolificContext,
@@ -740,6 +792,7 @@ export default function App() {
             return;
           }
           await submitPhaseResponse('step_2', trial, {
+            caption_id: trial.caption_id, // <-- Explicitly bind the ID
             edited_text: editedText,
             response_text: editedText,
           });
@@ -768,6 +821,7 @@ export default function App() {
             return;
           }
           await submitPhaseResponse('step_3', trial, {
+            caption_id: trial.caption_id,
             grammar_rating: grammarRating,
             accuracy_rating: accuracyRating,
           });
