@@ -276,7 +276,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
     for r in rows:
         p_step = r.processing_step.lower()
         caps = r.num_of_captions
-        
+        # print(r)
         # Step 1: Gathering phase, less than 5 captions
         if caps < 5 and p_step == 'gathering':
             step_1_pool.append(r)
@@ -290,9 +290,11 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
             step_3_pool.append(r)
     
     # 2. Select Step 1 
+    # print(step_1_pool)
     step_1_selected = _pick_rows(step_1_pool, step_1_trials, rng)
     used_rir_ids = {r.rir_id for r in step_1_selected} # Track IDs to prevent session overlap
-    
+    # print(used_rir_ids)
+    # print(step_1_selected)
     # 3. Select Step 2 (Excluding anything used in Step 1)
     available_for_step_2 = [r for r in step_2_pool if r.rir_id not in used_rir_ids]
     if len(available_for_step_2) < step_2_trials:
@@ -318,10 +320,10 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         batches["step_3"].append(_build_trial_payload("step_3", row, i, rng))
         
     training_urls = {
-        "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/speech_training.wav", 5000),
-        "music_file_url": generate_presigned_url("stimuli", "training_stimuli/music_training.wav", 5000),
-        "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/clap_training.wav", 5000),
-        "training_baseline_caption": "A reverberant chamber with hard surfaces produces distinct echoes when a sound is made",
+        "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_sing.mp3", 5000),
+        "music_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_drum.mp3", 5000),
+        "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed.mp3", 5000),
+        "training_baseline_caption": "An auditory experience at in evokes a balanced and natural sensation as sound waves bounce within the grand, cavernous environment.",
     }
     training_payload = {
         "training_step_1": training_urls,
@@ -360,10 +362,34 @@ def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
         print(f"Successfully appended row to {sheet_name}")
     except Exception as e:
         print(f"Error appending to {sheet_name}: {e}")
+
+def get_caption_by_id(caption_id: str, ) -> None:
+    spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
+    if not spreadsheet_id:
+        return
+    try:
+        import gspread
+        import google.auth
+        
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        credentials, _ = google.auth.default(scopes=scopes)
+        client = gspread.authorize(credentials)
+        
+        worksheet = client.open_by_key(spreadsheet_id).worksheet("captions_table")
+        cell = worksheet.find(caption_id, in_column=1)
+        
+        row_number = cell.row
+        return worksheet.cell(row_number, 5).value
+        
+    except gspread.exceptions.CellNotFound:
+        print(f"Error: rir_id '{caption_id}' not found in audio_stimuli sheet.")
+    except Exception as e:
+        print(f"Error incrementing caption count: {e}")
         
 def increment_caption_count(rir_id: str, target_col_name: str) -> None:
     """Finds a specific rir_id in the audio_stimuli sheet and increments its caption count."""
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
+    target_col = 0
     if not spreadsheet_id:
         return
 
@@ -376,8 +402,6 @@ def increment_caption_count(rir_id: str, target_col_name: str) -> None:
         client = gspread.authorize(credentials)
         
         worksheet = client.open_by_key(spreadsheet_id).worksheet("audio_stimuli")
-        
-        # 1. Locate the exact cell containing the rir_id (searching only Column A)
         cell = worksheet.find(rir_id, in_column=1)
         row_number = cell.row
         
@@ -387,9 +411,9 @@ def increment_caption_count(rir_id: str, target_col_name: str) -> None:
             target_col = 9
         if target_col_name == "max_captions":
             target_col = 10
-        else:
-            target_col = 11
-        
+        elif target_col == 0:
+            raise ValueError("No Target Column Name given for updating the number of captions in the dataset for a given RIR ID.")
+            
         current_value = worksheet.cell(row_number, target_col).value
         
         # 3. Calculate the new value (handling blank cells gracefully)
@@ -397,7 +421,6 @@ def increment_caption_count(rir_id: str, target_col_name: str) -> None:
         
         # 4. Write the incremented value back to the exact cell
         worksheet.update_cell(row_number, target_col, new_count)
-        print(f"Successfully incremented {rir_id} to {new_count} captions.")
         
     except gspread.exceptions.CellNotFound:
         print(f"Error: rir_id '{rir_id}' not found in audio_stimuli sheet.")
@@ -437,16 +460,16 @@ def get_stimuli() -> Any:
 @app.post("/api/submit-response")
 def submit_response() -> Any:
     payload = request.get_json(silent=True) or {}
-    print("Received submission payload:")
-    pp.pprint(payload)
+    # print("Received submission payload:")
+    # pp.pprint(payload)
     phase = payload.get("phase")
     
     if phase not in {"step_1", "step_2", "step_3"}:
         return jsonify({"error": "phase must be one of step_1, step_2, or step_3"}), 400
 
     participant_context = payload.get("participant_context") or {}
-    print("Participant context:")
-    pp.pprint(participant_context)
+    # print("Participant context:")
+    # pp.pprint(participant_context)
     stimulus = payload.get("stimulus") or {}
     
     # Common Identifiers
@@ -497,7 +520,7 @@ def submit_response() -> Any:
             "experience_in_audio": participant_context.get("experience_in_audio", ""),
         })
         
-        increment_caption_count(rir_id, "num_of_captions")
+        increment_caption_count(rir_id, target_col_name="num_of_captions")
         
     # ----------------------------------------------------
     # ROUTE 2: Rephrasing/Editing -> captions_table
@@ -526,7 +549,10 @@ def submit_response() -> Any:
             "age_range": participant_context.get("age_range", ""),
             "experience_in_audio": participant_context.get("experience_in_audio", ""),
         })
-
+        original_caption = get_caption_by_id(target_caption_id)
+        if edited_text != original_caption:
+            increment_caption_count(rir_id, target_col_name="num_of_captions")
+        
     # ----------------------------------------------------
     # ROUTE 3: Evaluation -> evaluations_table
     # ----------------------------------------------------
@@ -555,7 +581,7 @@ def submit_response() -> Any:
             "fluency_score": int(grammar)
         })
 
-        increment_caption_count(rir_id, "num_of_scored_captions")
+        increment_caption_count(rir_id, target_col_name="num_of_scored_captions")
         
     return jsonify({"ok": True, "phase": phase})
 

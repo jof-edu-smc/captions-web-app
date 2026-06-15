@@ -157,21 +157,21 @@ function AudioBlock({ trial, caption, baseline, showCaption = false, showBaselin
         
         {trial.speech_file_url && (
           <div className="audio-row">
-            <span className="caption-label">Speech Reference</span>
+            <span className="caption-label">A human voice in the space</span>
             <audio controls src={trial.speech_file_url} className="audio-player" style={{ width: '100%' }} />
           </div>
         )}
 
         {trial.music_file_url && (
           <div className="audio-row">
-            <span className="caption-label">Music Reference</span>
+            <span className="caption-label">A musical instrument in the space</span>
             <audio controls src={trial.music_file_url} className="audio-player" style={{ width: '100%' }} />
           </div>
         )}
 
         {trial.clap_file_url && (
           <div className="audio-row">
-            <span className="caption-label">CLAP Reference</span>
+            <span className="caption-label">A clap or pop in the space</span>
             <audio controls src={trial.clap_file_url} className="audio-player" style={{ width: '100%' }} />
           </div>
         )}
@@ -213,7 +213,7 @@ function IntroScreen({ completionUrl, pisUrl, onContinue }) {
             Open participant information sheet (PDF)
           </a>
         ) : (
-          <span className="context-note">Loading the Study...</span>
+          <span className="context-note">Download Study File Here...</span>
         )}
         {completionUrl ? <p className="context-note">Prolific completion link detected and will be used at the end of the study.</p> : null}
       </div>
@@ -321,7 +321,7 @@ function Step1Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
         <span className="caption-label">Create Caption</span>
         <textarea
           value={text}
-          onChange={(event) => setText(event.target.value.slice(0, 200))}
+          onChange={(event) => setText(event.target.value.slice(0, 250))}
           rows={3}
           maxLength={250}
           placeholder="Type your caption here..."
@@ -461,7 +461,7 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
     <ScreenShell
       eyebrow="Training · Step 1"
       title="Practice: Generative Captioning"
-      description="Now, you will see those same three sounds recorded in the same room are playable. But below, there is a text box for you to type in a caption. This caption is meant to describe the room from the three recordings. All 3 recordings are from the same room, but the sources playing in that room are different. Using the examples, write a caption that effectively describes what the room sounds like and how it affects the source of the sound. "
+      description="In this step you must describe the acoustics of the space that the three different sources are in. All three sources are in the space physical space. Do NOT try to identify whether it's a Cathedral or an Office. Your caption must contain at least 8 words. Like the captions below, avoid the use of filler phrases like: There is..., I hear..., sound of..., or sounds like..."
       footer={
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
           <button 
@@ -494,9 +494,11 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
       <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
         <span className="caption-label">Training: Examples of Captions</span>
         <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <li>A lively, ringing quality fills the air</li>
-          <li>A tightly reflective and vibrant space</li>
-          <li>Sound spreads evenly and fades smoothly</li>
+          <li>The sound waves sustain for a long time, creating a rich and highly reverberant tail characteristic of a grand, cavernous environment.</li>
+          <li>It provides a natural warmth and clear presence to the sound, rendering the acoustic environment feel balanced and natural.</li>
+          <li>This space is blurry, diffuse, and heavily washed out, meaning that individual details melt into a dense cloud of reflections, obscuring fine textures.</li>
+          <li>The spatial environment around creates an envelopment where reflections sustain for a long time and the audio feels diffuse and washed out.</li>
+          <li>An auditory experience that in evokes a balanced and natural sensation as sound waves bounce within the grand, cavernous environment.</li>
         </ul>
       </div>
 
@@ -597,7 +599,7 @@ function TrainingCompleteScreen({ onProceed, onGoBack }) {
 export default function App() {
   const prolificContext = useMemo(() => parseQueryParams(), []);
   const completionUrl = useMemo(() => buildCompletionUrl(prolificContext), [prolificContext]);
-  const [phase, setPhase] = useState('intro');
+  const [phase, setPhase] = useState('loading');
   const [stimuli, setStimuli] = useState(null);
   const [training, setTraining] = useState(null);
   const [pisUrl, setPisUrl] = useState('');
@@ -609,7 +611,7 @@ export default function App() {
       step_2: 0, 
       step_3: 0
   });
-  const [statusMessage, setStatusMessage] = useState('Loading survey...');
+  const [statusMessage, setStatusMessage] = useState('Creating User Study');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -621,15 +623,21 @@ export default function App() {
           session_id: prolificContext.session_id,
           seed: [prolificContext.prolific_id, prolificContext.study_id, prolificContext.session_id].filter(Boolean).join(':'),
         });
+        
         const response = await fetch(`/api/get-stimuli?${params.toString()}`);
         if (!response.ok) {
           throw new Error(`Stimulus request failed with status ${response.status}`);
         }
         const data = await response.json();
+        setStatusMessage('Gathering Audio Files.')
         setStimuli(data.stimuli);
+        setStatusMessage('Setting up Training Steps')
         setTraining(data.training);
+        setStatusMessage('Fetching Participant Information Sheet')
         setPisUrl(data.pis_url);
         setStatusMessage('Survey ready.');
+
+        setPhase('intro');
       } catch (error) {
         setStatusMessage(error instanceof Error ? error.message : 'Failed to load stimuli.');
       }
@@ -840,5 +848,9 @@ export default function App() {
     return <CompletionScreen completionUrl={completionUrl} />;
   }
 
-  return <ScreenShell eyebrow="Loading" title="Preparing study" description={statusMessage} />;
+  return <ScreenShell eyebrow="Loading" title="Preparing study" description={statusMessage}>
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0 20px 0' }}>
+        <div className="loader"></div>
+      </div>
+  </ScreenShell>;
 }

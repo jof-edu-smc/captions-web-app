@@ -288,6 +288,26 @@ h1 {
   box-shadow: none;
 }
 
+.loader {
+  width: 48px;
+  height: 48px;
+  border: 5px solid #E0E0E0; /* Light grey background ring */
+  border-bottom-color: #3498db; /* Blue spinning accent */
+  border-radius: 50%;
+  display: inline-block;
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 760px) {
   .screen-card {
     padding: 24px 18px;
@@ -312,3 +332,4 @@ h1 {
     width: 100%;
   }
 }
+
