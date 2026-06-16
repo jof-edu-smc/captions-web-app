@@ -55,6 +55,7 @@ class StimulusRow:
     audio_speech_id: str
     processing_step: str
     num_of_captions: int
+    num_of_scored_captions: int
     captions: list[dict[str, str]]
 
 
@@ -112,6 +113,9 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
             raw_num = str(rir.get("num_of_captions", "0")).strip()
             num_captions = int(raw_num) if raw_num.isdigit() else 0
             
+            scored_raw = str(rir.get("num_of_scored_captions", "0")).strip()
+            num_scored_captions = int(scored_raw) if scored_raw.isdigit() else 0
+            
             row = StimulusRow(
                 rir_id=rir_id,
                 audio_clap_id=rir.get("audio_clap_id", "").strip(),
@@ -119,6 +123,7 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
                 audio_speech_id=rir.get("audio_speech_id", "").strip(),
                 processing_step=rir.get("processing_step", "").strip(),
                 num_of_captions=num_captions,
+                num_of_scored_captions=num_scored_captions,
                 captions=linked_captions,
             )
             rows.append(row)
@@ -283,27 +288,29 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
             step_1_pool.append(r)
             
         # Step 2: Editing phase, exactly 5 captions, must have caption data to edit
-        if caps == 5 and p_step == 'editing' or len(r.captions) > 0:
+        if (caps == 5 and p_step == 'editing') or r.num_of_captions > 0:
             step_2_pool.append(r)
             
         # Step 3: Editing OR Scoring phase, exactly 5 captions, must have caption data to score
-        if caps == 5 and p_step in ['editing', 'scoring'] and len(r.captions) > 0:
+        if (caps == 5 and p_step in ['editing', 'scoring']) or (r.num_of_captions > r.num_of_scored_captions and r.num_of_captions > 0):
             step_3_pool.append(r)
     
     # 2. Select Step 1 
-    # print(step_1_pool)
+    # print(f"Pools: Step 1: {len(step_1_pool)}, Step 2: {len(step_2_pool)}, Step 3: {len(step_3_pool)}")
     step_1_selected = _pick_rows(step_1_pool, step_1_trials, rng)
+    # print(f"Selected {len(step_1_selected)} rows for Step 1. {step_1_trials} requested.")
     used_rir_ids = {r.rir_id for r in step_1_selected} # Track IDs to prevent session overlap
-    # print(used_rir_ids)
-    # print(step_1_selected)
+    # print(f"length of RIR ID sUsed: {(len(used_rir_ids))} - {len(rows)}")
     # 3. Select Step 2 (Excluding anything used in Step 1)
     available_for_step_2 = [r for r in step_2_pool if r.rir_id not in used_rir_ids]
     if len(available_for_step_2) < step_2_trials:
         print(f"Warning: Only {len(available_for_step_2)} eligible rows for Step 2 after filtering, but {step_2_trials} trials requested. Will allow repeats from Step 1 pool.")
-
+    
+    # print(f"Available for Step 2: {len(available_for_step_2)}")
     step_2_selected = _pick_rows(available_for_step_2, step_2_trials, rng)
     used_rir_ids.update({r.rir_id for r in step_2_selected}) # Update tracking
-    
+   
+    # print(f"Used RIR IDs after Step 2: {len(rows)} - {len(used_rir_ids)}")
     # 4. Select Step 3 (Excluding anything used in Step 1 or 2)
     available_for_step_3 = [r for r in step_3_pool if r.rir_id not in used_rir_ids]
     if len(available_for_step_3) < step_3_trials:
