@@ -158,21 +158,21 @@ function AudioBlock({ trial, caption, baseline, showCaption = false, showBaselin
         {trial.speech_file_url && (
           <div className="audio-row">
             <span className="caption-label">A human voice in the space</span>
-            <audio controls src={trial.speech_file_url} className="audio-player" style={{ width: '100%' }} />
+            <audio controls preload="none" src={trial.speech_file_url} className="audio-player" style={{ width: '100%' }} />
           </div>
         )}
 
         {trial.music_file_url && (
           <div className="audio-row">
             <span className="caption-label">A musical instrument in the space</span>
-            <audio controls src={trial.music_file_url} className="audio-player" style={{ width: '100%' }} />
+            <audio controls preload="none" src={trial.music_file_url} className="audio-player" style={{ width: '100%' }} />
           </div>
         )}
 
         {trial.clap_file_url && (
           <div className="audio-row">
             <span className="caption-label">A clap or pop in the space</span>
-            <audio controls src={trial.clap_file_url} className="audio-player" style={{ width: '100%' }} />
+            <audio controls preload="none" src={trial.clap_file_url} className="audio-player" style={{ width: '100%' }} />
           </div>
         )}
 
@@ -424,8 +424,6 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
 }
 
 function HeadphoneAdjustmentScreen({ trial, onSubmit, onGoBack }) {
-  console.log("HELLO?")
-  console.log("Trial Body:", trial)
   return (
     <ScreenShell
       eyebrow="Headphone Calibration"

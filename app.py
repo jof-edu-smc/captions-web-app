@@ -25,6 +25,8 @@ STEP_1_TRIALS = int(os.getenv("STEP_1_TRIALS", "5"))
 STEP_2_TRIALS = int(os.getenv("STEP_2_TRIALS", "5"))
 STEP_3_TRIALS = int(os.getenv("STEP_3_TRIALS", "5"))
 
+URL_EXPIRATION = int(os.getenv("URL_EXPIRATION", "3600"))  # Default to 3600 seconds if not set 
+
 STIMULUS_CANDIDATES = [
     APP_DIR / "template_spreadsheet.csv",
 ]
@@ -153,13 +155,13 @@ def _pick_rows(rows: list[StimulusRow], count: int, rng: random.Random) -> list[
     return selected[:count]
 
 
-def generate_presigned_url(bucket_name: str, object_path: str, expiration: int = 900) -> str:
+def generate_presigned_url(bucket_name: str, object_path: str, expiration: int = 3600) -> str:
     """Generates a presigned URL for a GCS object using IAM API signing method.
 
     Args:
         bucket_name (str): Name of GCS Bucket
         object_name (str): Path to the object within the bucket (e.g., "folder/audio.mp3")
-        expiration (int, optional): Time of expiration from creation. Defaults to 900.
+        expiration (int, optional): Time of expiration from creation. Defaults to 3600.
 
     Returns:
         str: Returns a string of the Signed URL. If error, returns an empty string.
@@ -218,7 +220,7 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
             secure_urls[filename] = generate_presigned_url(
                 bucket_name="stimuli", 
                 object_path=gcs_object_path, 
-                expiration=900
+                expiration=URL_EXPIRATION
             )
             
     payload: dict[str, Any] = {
@@ -256,7 +258,7 @@ def _get_pis_pdf_url() -> str:
             # Look for a PDF with 'PIS' in the name
             if "PIS" in blob.name.upper() and blob.name.lower().endswith("_latest.pdf"):
                 # Expiration set to 1 hour (3600 seconds)
-                return generate_presigned_url("stimuli", blob.name, expiration=5000)
+                return generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
         return ""
     except Exception as e:
         print(f"Error fetching PIS PDF url: {e}")
@@ -281,7 +283,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
             step_1_pool.append(r)
             
         # Step 2: Editing phase, exactly 5 captions, must have caption data to edit
-        if caps == 5 and p_step == 'editing' and len(r.captions) > 0:
+        if caps == 5 and p_step == 'editing' or len(r.captions) > 0:
             step_2_pool.append(r)
             
         # Step 3: Editing OR Scoring phase, exactly 5 captions, must have caption data to score
@@ -319,9 +321,9 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         batches["step_3"].append(_build_trial_payload("step_3", row, i, rng))
         
     training_urls = {
-        "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_sing.mp3", 5000),
-        "music_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_drum.mp3", 5000),
-        "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed.mp3", 5000),
+        "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_sing.mp3", URL_EXPIRATION),
+        "music_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_drum.mp3", URL_EXPIRATION),
+        "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed.mp3", URL_EXPIRATION),
         "training_baseline_caption": "An auditory experience at in evokes a balanced and natural sensation as sound waves bounce within the grand, cavernous environment.",
     }
     training_payload = {
