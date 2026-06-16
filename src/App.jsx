@@ -213,7 +213,7 @@ function IntroScreen({ completionUrl, pisUrl, onContinue }) {
             Open participant information sheet (PDF)
           </a>
         ) : (
-          <span className="context-note">Download Study File Here...</span>
+          <span className="context-note">Loading Participant Information to Download...</span>
         )}
         {completionUrl ? <p className="context-note">Prolific completion link detected and will be used at the end of the study.</p> : null}
       </div>
@@ -275,21 +275,32 @@ function CompletionScreen({ completionUrl }) {
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [completionUrl]);
-
-  return (
-    <ScreenShell
-      eyebrow="Complete"
-      title="Thank you for participating"
-      description="You have finished all three evaluation steps. Please use the Prolific completion link below if it has not redirected automatically."
-      footer={
-        completionUrl ? (
-          <a className="primary-button primary-button-link" href={completionUrl}>
-            Continue to Prolific
-          </a>
-        ) : null
-      }
-    />
-  );
+  console.log("Completion URL:", completionUrl);
+  if (completionUrl === null || completionUrl === undefined || completionUrl === '') {
+    return (
+      <ScreenShell
+        eyebrow="Completion"
+        title="Thank you for participating"
+        description="You have finished all three evaluation steps and the study is complete. Thank you so much for your time and effort."
+      />
+    );
+  }
+  else {
+    return (
+      <ScreenShell
+        eyebrow="Complete"
+        title="Thank you for participating"
+        description="You have finished all three evaluation steps and the study is complete. Thank you so much for your time and effort. Please use the Prolific completion link below if it has not redirected automatically."
+        footer={
+          completionUrl ? (
+            <a className="primary-button primary-button-link" href={completionUrl}>
+              Continue to Prolific
+            </a>
+          ) : null
+        }
+      />
+    );
+  }
 }
 
 function Step1Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {

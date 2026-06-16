@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import os
 import random
 import pprint
@@ -255,9 +254,9 @@ def _get_pis_pdf_url() -> str:
         
         for blob in blobs:
             # Look for a PDF with 'PIS' in the name
-            if "PIS" in blob.name.upper() and blob.name.lower().endswith(".pdf"):
+            if "PIS" in blob.name.upper() and blob.name.lower().endswith("_latest.pdf"):
                 # Expiration set to 1 hour (3600 seconds)
-                return generate_presigned_url("stimuli", blob.name, expiration=3600)
+                return generate_presigned_url("stimuli", blob.name, expiration=5000)
         return ""
     except Exception as e:
         print(f"Error fetching PIS PDF url: {e}")
