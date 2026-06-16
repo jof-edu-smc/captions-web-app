@@ -11,9 +11,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-from dotenv import load_dotenv
-from flask import Flask, abort, jsonify, request, send_from_directory
-from flask_cors import CORS
+from dotenv import load_dotenv # type: ignore
+from flask import Flask, abort, jsonify, request, send_from_directory # type: ignore
+from flask_cors import CORS # type: ignore
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -70,8 +70,8 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
         raise ValueError("No Google Sheets ID found in environment variables. Please set GOOGLE_SHEETS_ID to load stimuli from Google Sheets.")
 
     try:
-        import gspread
-        import google.auth
+        import gspread # type: ignore
+        import google.auth # type: ignore
         
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
@@ -167,8 +167,8 @@ def generate_presigned_url(bucket_name: str, object_path: str, expiration: int =
     """
     try:
         gcp_project = os.getenv("GCP_PROJECT_ID")
-        import google.auth
-        from google.auth.transport import requests
+        import google.auth # type: ignore
+        from google.auth.transport import requests # type: ignore
         
         credentials, _ = google.auth.default()
         if os.getenv("RUNNING_LOCAL"):
@@ -347,8 +347,8 @@ def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
         return
 
     try:
-        import gspread
-        import google.auth
+        import gspread # type: ignore
+        import google.auth # type: ignore
         
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
@@ -368,8 +368,8 @@ def get_caption_by_id(caption_id: str, ) -> None:
     if not spreadsheet_id:
         return
     try:
-        import gspread
-        import google.auth
+        import gspread # type: ignore
+        import google.auth # type: ignore
         
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
@@ -394,8 +394,8 @@ def increment_caption_count(rir_id: str, target_col_name: str) -> None:
         return
 
     try:
-        import gspread
-        import google.auth
+        import gspread # type: ignore
+        import google.auth # type: ignore
         
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
