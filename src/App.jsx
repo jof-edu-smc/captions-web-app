@@ -53,6 +53,17 @@ function buildCompletionUrl(context) {
   return '';
 }
 
+function logToServer(level, message, context = {}) {
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level, message, context }),
+  }).catch((err) => {
+    // Silently fail if the logger itself fails, so we don't crash the app
+    console.error("Failed to send log to server:", err);
+  });
+}
+
 function ChipGroup({ label, options, value, onChange, hint }) {
   return (
     <section className="field-group">
@@ -158,21 +169,44 @@ function AudioBlock({ trial, caption, baseline, showCaption = false, showBaselin
         {trial.speech_file_url && (
           <div className="audio-row">
             <span className="caption-label">A human voice in the space</span>
-            <audio controls preload="none" src={trial.speech_file_url} className="audio-player" style={{ width: '100%' }} />
+            <audio 
+              controls preload="none" 
+              src={trial.speech_file_url} 
+              className="audio-player"
+              style={{ width: '100%' }} 
+              onStalled={() => logToServer('WARN', 'Audio playback stalled (likely Chrome limit)', { url: trial.speech_file_url })}
+              onError={(e) => logToServer('ERROR', 'Audio failed to load completely', { error: e.nativeEvent.type, url: trial.speech_file_url })}
+            />
           </div>
         )}
 
         {trial.music_file_url && (
           <div className="audio-row">
             <span className="caption-label">A musical instrument in the space</span>
-            <audio controls preload="none" src={trial.music_file_url} className="audio-player" style={{ width: '100%' }} />
+            <audio 
+              controls 
+              preload="none" 
+              src={trial.music_file_url} 
+              className="audio-player" 
+              style={{ width: '100%' }} 
+              onStalled={() => logToServer('WARN', 'Audio playback stalled (likely Chrome limit)', { url: trial.speech_file_url })}
+              onError={(e) => logToServer('ERROR', 'Audio failed to load completely', { error: e.nativeEvent.type, url: trial.speech_file_url })}
+            />
           </div>
         )}
 
         {trial.clap_file_url && (
           <div className="audio-row">
             <span className="caption-label">A clap or pop in the space</span>
-            <audio controls preload="none" src={trial.clap_file_url} className="audio-player" style={{ width: '100%' }} />
+            <audio 
+              controls 
+              preload="none" 
+              src={trial.clap_file_url} 
+              className="audio-player" 
+              style={{ width: '100%' }}
+              onStalled={() => logToServer('WARN', 'Audio playback stalled (likely Chrome limit)', { url: trial.speech_file_url })}
+              onError={(e) => logToServer('ERROR', 'Audio failed to load completely', { error: e.nativeEvent.type, url: trial.speech_file_url })}
+            />
           </div>
         )}
 
@@ -389,8 +423,7 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
   }
 
   const canSubmit = Boolean(grammarRating && accuracyRating && !submitting);
-  console.log(trial.selected_caption)
-  console.log(trial.baseline_caption)
+  
   return (
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_3} · ${phaseIndex + 1}/${totalTrials}`}
@@ -645,10 +678,20 @@ export default function App() {
         setStatusMessage('Fetching Participant Information Sheet')
         setPisUrl(data.pis_url);
         setStatusMessage('Survey ready.');
+        
+        logToServer('INFO', 'Session successfully loaded and ready', { 
+          session_id: prolificContext.session_id, 
+          prolific_id: prolificContext.prolific_id 
+        });
 
         setPhase('intro');
       } catch (error) {
-        setStatusMessage(error instanceof Error ? error.message : 'Failed to load stimuli.');
+        const errorMsg = error instanceof Error ? error.message : 'Failed to load stimuli.';
+        setStatusMessage(errorMsg);
+        logToServer('ERROR', 'Failed to load stimuli', { 
+          session_id: prolificContext.session_id,
+          error: errorMsg 
+        });
       }
     }
 
@@ -679,6 +722,13 @@ export default function App() {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || `Submit failed with status ${response.status}`);
       }
+    } catch(error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to submit response.';
+      setStatusMessage(errorMsg);
+      logToServer('ERROR', 'Failed to submit response', { 
+        session_id: prolificContext.session_id,
+        error: errorMsg 
+      });
     } finally {
       setSubmitting(false);
     }
@@ -779,6 +829,13 @@ export default function App() {
           if (!trial || !generatedText.trim()) {
             return;
           }
+
+          logToServer('INFO', 'Session successfully loaded and ready', { 
+            generated_text: generatedText,
+            raw_text: generatedText,
+            response_text: generatedText,
+          });
+          
           await submitPhaseResponse('step_1', trial, {
             generated_text: generatedText,
             raw_text: generatedText,
@@ -854,6 +911,9 @@ export default function App() {
   }
 
   if (phase === 'completion') {
+    logToServer('INFO', 'A study has been completed', { 
+          session_id: prolificContext.session_id
+        });
     return <CompletionScreen completionUrl={completionUrl} />;
   }
 

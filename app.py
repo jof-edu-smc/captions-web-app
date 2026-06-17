@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import sys
 import random
+import time
 import pprint
 from google.cloud import storage
 from collections.abc import Iterable
@@ -333,6 +335,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed.mp3", URL_EXPIRATION),
         "training_baseline_caption": "An auditory experience at in evokes a balanced and natural sensation as sound waves bounce within the grand, cavernous environment.",
     }
+    
     training_payload = {
         "training_step_1": training_urls,
         "training_step_2": training_urls,
@@ -357,17 +360,18 @@ def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
     try:
         import gspread # type: ignore
         import google.auth # type: ignore
-        
+        print(f"Appending record to {sheet_name}: {record} at {datetime.now(timezone.utc).isoformat()}")
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
         client = gspread.authorize(credentials)
-        
+        print(f"Logged in {credentials.service_account_email if hasattr(credentials, 'service_account_email') else 'unknown'} to Google Sheets. at {datetime.now(timezone.utc).isoformat()}")
+        print(f"Opening Spreadsheet ID: {spreadsheet_id}, Sheet Name: {sheet_name}")
         # Connect to the specific table/worksheet
         worksheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name)
-        
+        print(f"Successfully opened worksheet {sheet_name}. Current row count: {worksheet.row_count} at {datetime.now(timezone.utc).isoformat()}")
         # Ensure we write values in the exact order of the provided dictionary
         worksheet.append_row(list(record.values()))
-        print(f"Successfully appended row to {sheet_name}")
+        print(f"Successfully appended row to {sheet_name} at {datetime.now(timezone.utc).isoformat()}. New row count: {worksheet.row_count}")
     except Exception as e:
         print(f"Error appending to {sheet_name}: {e}")
 
@@ -529,7 +533,7 @@ def submit_response() -> Any:
         })
         
         increment_caption_count(rir_id, target_col_name="num_of_captions")
-        
+        print(f"Step 1 submission processed for RIR ID {rir_id} by annotator {annotator_id}. New caption added and count incremented.")
     # ----------------------------------------------------
     # ROUTE 2: Rephrasing/Editing -> captions_table
     # ----------------------------------------------------
@@ -560,7 +564,7 @@ def submit_response() -> Any:
         original_caption = get_caption_by_id(target_caption_id)
         if edited_text != original_caption:
             increment_caption_count(rir_id, target_col_name="num_of_captions")
-        
+        print(f"Step 2 submission processed for RIR ID {rir_id} by annotator {annotator_id}. Edited caption added and count updated if changed.")
     # ----------------------------------------------------
     # ROUTE 3: Evaluation -> evaluations_table
     # ----------------------------------------------------
@@ -590,6 +594,7 @@ def submit_response() -> Any:
         })
 
         increment_caption_count(rir_id, target_col_name="num_of_scored_captions")
+        print(f"Step 3 submission processed for RIR ID {rir_id} by annotator {annotator_id}. Evaluation recorded and scored caption count incremented.")
         
     return jsonify({"ok": True, "phase": phase})
 
@@ -607,6 +612,22 @@ def serve_study_file(filename: str) -> Any:
     if not requested_path.exists() or requested_path.suffix.lower() not in {".pdf", ".csv"}:
         abort(404)
     return send_from_directory(APP_DIR, filename)
+
+@app.post("/api/log")
+def client_log() -> Any:
+    """Receives logs from the React frontend and prints them to the Docker console."""
+    payload = request.get_json(silent=True) or {}
+    level = payload.get("level", "INFO").upper()
+    message = payload.get("message", "No message provided")
+    context = payload.get("context", {})
+
+    # Format the log so it stands out in your terminal
+    log_string = f"[CLIENT {level}] {message} | Context: {context}"
+    
+    # Print to stderr to ensure Docker flushes it to the console immediately
+    print(log_string, file=sys.stderr)
+    
+    return jsonify({"ok": True})
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
