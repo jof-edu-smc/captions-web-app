@@ -557,10 +557,10 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
         <span className="caption-label">Training: Examples of Captions</span>
         <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <li>The sound waves sustain for a long time, creating a rich and highly reverberant tail characteristic of a grand, cavernous environment.</li>
-          <li>It provides a natural warmth and clear presence to the sound, rendering the acoustic environment feel balanced and natural.</li>
-          <li>This space is blurry, diffuse, and heavily washed out, meaning that individual details melt into a dense cloud of reflections, obscuring fine textures.</li>
-          <li>The spatial environment around creates an envelopment where reflections sustain for a long time and the audio feels diffuse and washed out.</li>
-          <li>An auditory experience that in evokes a balanced and natural sensation as sound waves bounce within the grand, cavernous environment.</li>
+          <li>It provides a natural warmth and clear presence to the sound, the room feels like a balanced and natural intimate performance space.</li>
+          <li>This room sounds blurry, diffuse, and heavily washed out, the individual details feel like a dense cloud of sound reflections off the surfaces, obscuring fine textures.</li>
+          <li>The space is very immersive with the way reflections are sustained for a long time. The audio feels diffuse and washed out as a result.</li>
+          <li>My experience is that of a a balanced and natural sensation within the grand, cavernous environment. It feels like it would make orchestral performances epic and powerful.</li>
         </ul>
       </div>
 
