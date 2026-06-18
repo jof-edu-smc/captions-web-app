@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 const AGE_OPTIONS = ['17 and younger', '18 - 24', '25 - 49', '50 - 64', '65 and older'];
 const AUDIO_OPTIONS = ['None', '0 - 1', '1 - 5', '5 - 10', '10+'];
+const HEARING_OPTIONS = ['No', 'Yes'];
 
 const PHASE_LABELS = {
   step_1: 'Step 1',
@@ -229,25 +230,37 @@ function AudioBlock({ trial, caption, baseline, showCaption = false, showBaselin
   );
 }
 
-function IntroScreen({ completionUrl, pisUrl, onContinue }) {
+function IntroScreen({ completionUrl, pisUrl, cfUrl, onContinue }) {
   return (
     <ScreenShell
       eyebrow="Welcome"
       title="Acoustic Caption Survey"
-      description="Please download & read the participant information sheet before continuing. This study asks you to listen to short audio clips and respond to three different caption tasks."
+      description="Please download & read the Participant Information Sheet and Consent Sheet informing what you consent to by taking part in the study."
       footer={
         <button className="primary-button" type="button" onClick={onContinue} disabled={!pisUrl}>
-          Next
+          Consent & Proceed
         </button>
       }
     >
+      {/* <label className="text-area-shell">
+        <span className="caption-label">Create Caption</span> */}
       <div className="intro-grid">
+        <label className="text-area-shell">
+          <span><b>By clicking "Consent & Proceed" you agree and understand the points in the Consent Form and Participant Information Sheet</b></span>
+        </label>
         {pisUrl ? (
           <a className="secondary-link" href={pisUrl} target="_blank" rel="noreferrer">
-            Open participant information sheet (PDF)
+            Open Participant Information Sheet (PDF)
           </a>
         ) : (
           <span className="context-note">Loading Participant Information to Download...</span>
+        )}
+        {cfUrl ? (
+          <a className="secondary-link" href={cfUrl} target="_blank" rel="noreferrer">
+            Open Consent Sheet (PDF)
+          </a>
+        ) : (
+          <span className="context-note">Loading Consent Sheet to Download...</span>
         )}
         {completionUrl ? <p className="context-note">Prolific completion link detected and will be used at the end of the study.</p> : null}
       </div>
@@ -283,6 +296,13 @@ function DemographicsScreen({ demographics, onChange, onSubmit }) {
           value={demographics.experience_in_audio}
           onChange={(value) => onChange({ ...demographics, experience_in_audio: value })}
           hint="Estimate how much audio-related experience you have."
+        />
+        <ChipGroup
+          label="Hearing"
+          options={HEARING_OPTIONS}
+          value={demographics.hearing}
+          onChange={(value) => onChange({ ...demographics, hearing: value })}
+          hint="Do you have any hearing impairments or conditions that might affect your ability to hear audio clearly?"
         />
       </div>
     </ScreenShell>
@@ -645,7 +665,8 @@ export default function App() {
   const [stimuli, setStimuli] = useState(null);
   const [training, setTraining] = useState(null);
   const [pisUrl, setPisUrl] = useState('');
-  const [demographics, setDemographics] = useState({ age_range: '', experience_in_audio: '' });
+  const [cfUrl, setCfUrl] = useState('');
+  const [demographics, setDemographics] = useState({ age_range: '', experience_in_audio: '', hearing: '' });
   const [trialIndex, setTrialIndex] = useState({ 
       training_step_1: 0,
       training_step_2: 0,
@@ -677,6 +698,7 @@ export default function App() {
         setTraining(data.training);
         setStatusMessage('Fetching Participant Information Sheet')
         setPisUrl(data.pis_url);
+        setCfUrl(data.cf_url);
         setStatusMessage('Survey ready.');
         
         logToServer('INFO', 'Session successfully loaded and ready', { 
@@ -749,6 +771,7 @@ export default function App() {
       <IntroScreen
         completionUrl={completionUrl}
         pisUrl={pisUrl} 
+        cfUrl={cfUrl}
         onContinue={() => setPhase('demographics')}
       />
     );
@@ -835,7 +858,7 @@ export default function App() {
             raw_text: generatedText,
             response_text: generatedText,
           });
-          
+
           await submitPhaseResponse('step_1', trial, {
             generated_text: generatedText,
             raw_text: generatedText,
@@ -855,6 +878,23 @@ export default function App() {
 
   if (phase === 'step_2') {
     const trial = step2Trials[trialIndex.step_2];
+    console.log("Current Step 2 Trial:", trial);
+
+    if (!trial) {
+      return (
+        <ScreenShell
+          eyebrow="Phase Skipped"
+          title="No Editing Trials Available"
+          description="There are currently no captions in the database that require editing."
+          footer={
+            <button className="primary-button" onClick={() => setPhase(NEXT_PHASE.step_2)}>
+              Continue to Step 3
+            </button>
+          }
+        />
+      );
+    }
+
     return (
       <Step2Screen
         trial={trial}
@@ -884,6 +924,23 @@ export default function App() {
 
   if (phase === 'step_3') {
     const trial = step3Trials[trialIndex.step_3];
+    console.log("Current Step 3 Trial:", trial);
+
+    if (!trial) {
+      return (
+        <ScreenShell
+          eyebrow="Phase Skipped"
+          title="No Scoring Trials Available"
+          description="There are currently no captions in the database that require scoring."
+          footer={
+            <button className="primary-button" onClick={() => setPhase(NEXT_PHASE.step_3)}>
+              Finish Survey
+            </button>
+          }
+        />
+      );
+    }
+    
     return (
       <Step3Screen
         trial={trial}

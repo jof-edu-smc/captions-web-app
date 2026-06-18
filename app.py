@@ -179,9 +179,7 @@ def generate_presigned_url(bucket_name: str, object_path: str, expiration: int =
         from google.auth.transport import requests # type: ignore
         
         credentials, _ = google.auth.default()
-        if os.getenv("RUNNING_LOCAL"):
-            print("Running locally, using default credentials")
-        else:        
+        if not os.getenv("RUNNING_LOCAL"):      
             credentials.refresh(requests.Request())
         # print(f"Obtained credentials of type {credentials} for project {gcp_project}")
         
@@ -251,7 +249,7 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
 
     return payload
 
-def _get_pis_pdf_url() -> str:
+def _get_pdf_urls() -> str:
     """Finds the PIS PDF in the GCP bucket and returns a presigned URL."""
     try:
         gcp_project = os.getenv("GCP_PROJECT_ID")
@@ -261,12 +259,20 @@ def _get_pis_pdf_url() -> str:
         # List all files in the 'pdfs/' folder
         blobs = bucket.list_blobs(prefix="pdfs/")
         
+        pis_url = ""
+        cf_url = ""
+        
         for blob in blobs:
             # Look for a PDF with 'PIS' in the name
             if "PIS" in blob.name.upper() and blob.name.lower().endswith("_latest.pdf"):
                 # Expiration set to 1 hour (3600 seconds)
-                return generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
-        return ""
+                pis_url = generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
+            if "Consent-Form" in blob.name and blob.name.lower().endswith("_latest.pdf"):
+                cf_url = generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
+        return {
+            "pis_url": pis_url, 
+            "cf_url": cf_url,
+        }
     except Exception as e:
         print(f"Error fetching PIS PDF url: {e}")
         return ""
@@ -297,37 +303,41 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         if (caps == 5 and p_step in ['editing', 'scoring']) or (r.num_of_captions > r.num_of_scored_captions and r.num_of_captions > 0):
             step_3_pool.append(r)
     
+    # print(f"Pools after partitioning: Step 1: {len(step_1_pool)}, Step 2: {len(step_2_pool)}, Step 3: {len(step_3_pool)}")
+    batches = {"step_1": [], "step_2": [], "step_3": []}
+    
     # 2. Select Step 1 
     # print(f"Pools: Step 1: {len(step_1_pool)}, Step 2: {len(step_2_pool)}, Step 3: {len(step_3_pool)}")
     step_1_selected = _pick_rows(step_1_pool, step_1_trials, rng)
     # print(f"Selected {len(step_1_selected)} rows for Step 1. {step_1_trials} requested.")
+    for i, row in enumerate(step_1_selected):
+        batches["step_1"].append(_build_trial_payload("step_1", row, i, rng))
+    
     used_rir_ids = {r.rir_id for r in step_1_selected} # Track IDs to prevent session overlap
-    # print(f"length of RIR ID sUsed: {(len(used_rir_ids))} - {len(rows)}")
+    # print(f"length of RIR IDs Used: {(len(used_rir_ids))} - {len(rows)}")
+    
     # 3. Select Step 2 (Excluding anything used in Step 1)
     available_for_step_2 = [r for r in step_2_pool if r.rir_id not in used_rir_ids]
-    if len(available_for_step_2) < step_2_trials:
-        print(f"Warning: Only {len(available_for_step_2)} eligible rows for Step 2 after filtering, but {step_2_trials} trials requested. Will allow repeats from Step 1 pool.")
-    
-    # print(f"Available for Step 2: {len(available_for_step_2)}")
-    step_2_selected = _pick_rows(available_for_step_2, step_2_trials, rng)
-    used_rir_ids.update({r.rir_id for r in step_2_selected}) # Update tracking
-   
+    if len(available_for_step_2) >= step_2_trials:
+        # print(f"Available for Step 2: {len(available_for_step_2)}")
+        step_2_selected = _pick_rows(available_for_step_2, step_2_trials, rng)
+        used_rir_ids.update({r.rir_id for r in step_2_selected}) # Update tracking
+        
+        for i, row in enumerate(step_2_selected):
+            batches["step_2"].append(_build_trial_payload("step_2", row, i, rng))
+            
+    elif len(available_for_step_2) < step_2_trials:
+        print(f"Warning: Only {len(available_for_step_2)} eligible rows for Step 2 after filtering, but {step_2_trials} trials requested.")
+        
     # print(f"Used RIR IDs after Step 2: {len(rows)} - {len(used_rir_ids)}")
     # 4. Select Step 3 (Excluding anything used in Step 1 or 2)
     available_for_step_3 = [r for r in step_3_pool if r.rir_id not in used_rir_ids]
-    if len(available_for_step_3) < step_3_trials:
-        print(f"Warning: Only {len(available_for_step_3)} eligible rows for Step 3 after filtering, but {step_3_trials} trials requested. Will allow repeats from previous pools.")
-    step_3_selected = _pick_rows(available_for_step_3, step_3_trials, rng)
-    
-    batches = {"step_1": [], "step_2": [], "step_3": []}
-
-    # 5. Build the payloads
-    for i, row in enumerate(step_1_selected):
-        batches["step_1"].append(_build_trial_payload("step_1", row, i, rng))
-    for i, row in enumerate(step_2_selected):
-        batches["step_2"].append(_build_trial_payload("step_2", row, i, rng))
-    for i, row in enumerate(step_3_selected):
-        batches["step_3"].append(_build_trial_payload("step_3", row, i, rng))
+    if len(available_for_step_3) >= step_3_trials:
+        step_3_selected = _pick_rows(available_for_step_3, step_3_trials, rng)
+        for i, row in enumerate(step_3_selected):
+            batches["step_3"].append(_build_trial_payload("step_3", row, i, rng))
+    elif len(available_for_step_3) < step_3_trials:
+        print(f"Warning: Only {len(available_for_step_3)} eligible rows for Step 3 after filtering, but {step_3_trials} trials requested.")
         
     training_urls = {
         "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_sing.mp3", URL_EXPIRATION),
@@ -346,7 +356,8 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
         "training": training_payload,
         "stimuli": batches,
-        "pis_url": _get_pis_pdf_url(),
+        "pis_url": _get_pdf_urls()["pis_url"],
+        "cf_url": _get_pdf_urls()["cf_url"],
     }
 
 def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
@@ -364,7 +375,7 @@ def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
         client = gspread.authorize(credentials)
-        print(f"Logged in {credentials.service_account_email if hasattr(credentials, 'service_account_email') else 'unknown'} to Google Sheets. at {datetime.now(timezone.utc).isoformat()}")
+        print(f"Logged in with a {'Service Account' if hasattr(credentials, 'service_account_email') else 'unknown'} to Google Sheets at {datetime.now(timezone.utc).isoformat()}")
         print(f"Opening Spreadsheet ID: {spreadsheet_id}, Sheet Name: {sheet_name}")
         # Connect to the specific table/worksheet
         worksheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name)
@@ -530,6 +541,7 @@ def submit_response() -> Any:
             "session_id": participant_context.get("session_id", ""),
             "age_range": participant_context.get("age_range", ""),
             "experience_in_audio": participant_context.get("experience_in_audio", ""),
+            "hearing_impairment": participant_context.get("hearing", ""),
         })
         
         increment_caption_count(rir_id, target_col_name="num_of_captions")
@@ -583,6 +595,7 @@ def submit_response() -> Any:
             "session_id": participant_context.get("session_id", ""),
             "age_range": participant_context.get("age_range", ""),
             "experience_in_audio": participant_context.get("experience_in_audio", ""),
+            "hearing_impairment": participant_context.get("hearing", ""),
         })
             
         append_row_to_sheet("evaluations_table", {
