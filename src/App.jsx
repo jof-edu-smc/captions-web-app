@@ -246,7 +246,8 @@ function IntroScreen({ completionUrl, pisUrl, cfUrl, onContinue }) {
         <span className="caption-label">Create Caption</span> */}
       <div className="intro-grid">
         <label className="text-area-shell">
-          <span><b>By clicking "Consent & Proceed" you agree and understand the points in the Consent Form and Participant Information Sheet</b></span>
+          <span><b>By clicking "Consent & Proceed" you agree and understand the points in the Consent Form and Participant Information Sheet.</b></span>
+          <span>Additionally, please <b>turn off any VPN</b> temporarily should you proceed with the survey.</span>
         </label>
         {pisUrl ? (
           <a className="secondary-link" href={pisUrl} target="_blank" rel="noreferrer">
@@ -519,70 +520,77 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
   const remaining = 250 - text.length;
   const baseline = trial?.training_baseline_caption;
 
-  return (
-    <ScreenShell
-      eyebrow="Training · Step 1"
-      title="Practice: Generative Captioning"
-      description="In this step you must describe the acoustics of the space that the three different sources are in. All three sources are in the space physical space. Do NOT try to identify whether it's a Cathedral or an Office. Your caption must contain at least 8 words. Like the captions below, avoid the use of filler phrases like: There is..., I hear..., sound of..., or sounds like..."
-      footer={
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
-          <button 
-            type="button" 
-            onClick={onGoBack} 
-            style={{ 
-              background: 'transparent', 
-              border: '2px solid var(--accent)', 
-              color: 'var(--accent)', 
-              padding: '0 22px', 
-              borderRadius: '999px', 
-              cursor: 'pointer', 
-              fontWeight: '700' 
-            }}
-          >
-            Back
-          </button>
-          <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
-            Continue to Step 2 Practice
-          </button>
+  if (!trial) {
+    return null;
+  }
+  else {
+    return (
+      <ScreenShell
+        eyebrow="Training · Step 1"
+        title="Practice: Generative Captioning"
+        description="In this step you must describe the acoustics of the space that the three different sources are in. Listen to all 3 three sources (located in the same room), then describe the space in your own words. Feel free to be creative and elaborate on specific nuances that you hear. NOTE: This is a practice screen, and the response is not saved; don't spend too much time on this page. Just try to get a feel for the task and move on to the next page."
+        footer={
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
+            <button 
+              type="button" 
+              onClick={onGoBack} 
+              style={{ 
+                background: 'transparent', 
+                border: '2px solid var(--accent)', 
+                color: 'var(--accent)', 
+                padding: '0 22px', 
+                borderRadius: '999px', 
+                cursor: 'pointer', 
+                fontWeight: '700' 
+              }}
+            >
+              Back
+            </button>
+            <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
+              Continue
+            </button>
+          </div>
+        }
+      >
+        <AudioBlock trial={{ 
+          speech_file_url: trial?.speech_file_url,  
+          music_file_url: trial?.music_file_url,
+          clap_file_url: trial?.clap_file_url
+        }} />
+        
+        <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
+          <span className="caption-label">Training: Examples of Captions</span>
+          <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <li>The room sounds very bright. The high frequencies are significantly accented, especially for the snare and cymbals. The late reverb tail is quite interesting -- There is a nice richness to it. The room feels to be large and spacious. The top of the space could have a dome like structure, producing a lush reverb.</li>
+            <li>The room feels uncomfortably small, a bit claustrophobic. The early reflections are very audible, indicating closely spaced walls. The room is coloured with a non-uniform frequency response.</li>
+            <li>Reflections are short and controlled, creating an intimate and close acoustic feel characteristic of a compact or well-damped room.</li>
+          </ul>
         </div>
-      }
-    >
-      <AudioBlock trial={{ 
-        speech_file_url: trial?.speech_file_url,  
-        music_file_url: trial?.music_file_url,
-        clap_file_url: trial?.clap_file_url
-      }} />
-      
-      <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
-        <span className="caption-label">Training: Examples of Captions</span>
-        <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <li>The sound waves sustain for a long time, creating a rich and highly reverberant tail characteristic of a grand, cavernous environment.</li>
-          <li>It provides a natural warmth and clear presence to the sound, the room feels like a balanced and natural intimate performance space.</li>
-          <li>This room sounds blurry, diffuse, and heavily washed out, the individual details feel like a dense cloud of sound reflections off the surfaces, obscuring fine textures.</li>
-          <li>The space is very immersive with the way reflections are sustained for a long time. The audio feels diffuse and washed out as a result.</li>
-          <li>My experience is that of a a balanced and natural sensation within the grand, cavernous environment. It feels like it would make orchestral performances epic and powerful.</li>
-        </ul>
-      </div>
 
-      <label className="text-area-shell">
-        <span className="caption-label">Practice caption</span>
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value.slice(0, 200))}
-          rows={6}
-          maxLength={200}
-          placeholder="Type a practice caption here..."
-        />
-      </label>
-      <div className="countdown">{remaining} characters remaining</div>
-    </ScreenShell>
-  );
+        <label className="text-area-shell">
+          <span className="caption-label">Practice caption</span>
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value.slice(0, 200))}
+            rows={6}
+            maxLength={200}
+            placeholder="Type a practice caption here..."
+          />
+        </label>
+        <div className="countdown">{remaining} characters remaining</div>
+      </ScreenShell>
+    );
+  }
+  
 }
 
 function TrainingStep2Screen({ trial, onSubmit, onGoBack }) {
   const baseline = trial?.training_baseline_caption;
   const [text, setText] = useState(baseline);
 
+  if (!trial) {
+    return null;
+  }
   return (
     <ScreenShell
       eyebrow="Training · Step 2"
@@ -606,7 +614,7 @@ function TrainingStep2Screen({ trial, onSubmit, onGoBack }) {
             Back to Step 1
           </button>
           <button className="primary-button" type="button" onClick={onSubmit} disabled={!text.trim()}>
-            Start Actual Survey
+            Continue
           </button>
         </div>
       }
@@ -811,6 +819,23 @@ export default function App() {
 
   if (phase === 'training_step_1') {
     const trial = training?.training_step_1;
+    const step_1 = step1Trials[trialIndex.step_1];
+    if (!step_1) {
+      setPhase('training_step_2');
+      return null; // Prevent rendering the next screen until the phase is updated
+      // return (
+      //   <ScreenShell
+      //     eyebrow="Phase Skipped"
+      //     title="No Editing Trials Available"
+      //     description="There are currently no captions in the database that require editing."
+      //     footer={
+      //       <button className="primary-button" onClick={() => setPhase('training_step_2')}>
+      //         Continue
+      //       </button>
+      //     }
+      //   />
+      // );
+    }
     return (
       <TrainingStep1Screen 
         trial={trial}
@@ -822,6 +847,23 @@ export default function App() {
 
   if (phase === 'training_step_2') {
     const trial = training?.training_step_2;
+    const step_2 = step2Trials[trialIndex.step_2];
+    if (!step_2) {
+      setPhase('training_complete');
+      return null; // Prevent rendering the next screen until the phase is updated
+      // return (
+      //   <ScreenShell
+      //     eyebrow="Phase Skipped"
+      //     title="No Editing Trials Available"
+      //     description="There are currently no captions in the database that require editing."
+      //     footer={
+      //       <button className="primary-button" onClick={() => setPhase('training_complete')}>
+      //         Continue
+      //       </button>
+      //     }
+      //   />
+      // );
+    }
     return (
       <TrainingStep2Screen 
         trial={trial}
@@ -832,6 +874,10 @@ export default function App() {
   }
 
   if (phase === 'training_complete') {
+    if (!step1Trials.length & !step2Trials.length) {
+      setPhase('step_1');
+      return null;
+    }
     return (
       <TrainingCompleteScreen 
         onProceed={() => setPhase('step_1')} 
@@ -864,6 +910,7 @@ export default function App() {
             raw_text: generatedText,
             response_text: generatedText,
           });
+
           const nextIndex = trialIndex.step_1 + 1;
           if (nextIndex >= step1Trials.length) {
             setPhase(NEXT_PHASE.step_1);
@@ -881,18 +928,14 @@ export default function App() {
     console.log("Current Step 2 Trial:", trial);
 
     if (!trial) {
-      return (
-        <ScreenShell
-          eyebrow="Phase Skipped"
-          title="No Editing Trials Available"
-          description="There are currently no captions in the database that require editing."
-          footer={
-            <button className="primary-button" onClick={() => setPhase(NEXT_PHASE.step_2)}>
-              Continue to Step 3
-            </button>
-          }
-        />
-      );
+      const nextIndex = trialIndex.step_2 + 1;
+      if (nextIndex >= step2Trials.length) {
+        setPhase(NEXT_PHASE.step_2);
+        setTrialIndex((current) => ({ ...current, step_2: 0 }));
+      } else {
+        setTrialIndex((current) => ({ ...current, step_2: nextIndex }));
+      }
+      return null; 
     }
 
     return (
@@ -927,18 +970,13 @@ export default function App() {
     console.log("Current Step 3 Trial:", trial);
 
     if (!trial) {
-      return (
-        <ScreenShell
-          eyebrow="Phase Skipped"
-          title="No Scoring Trials Available"
-          description="There are currently no captions in the database that require scoring."
-          footer={
-            <button className="primary-button" onClick={() => setPhase(NEXT_PHASE.step_3)}>
-              Finish Survey
-            </button>
-          }
-        />
-      );
+      const nextIndex = trialIndex.step_3 + 1;
+      if (nextIndex >= step3Trials.length) {
+        setPhase(NEXT_PHASE.step_3);
+      } else {
+        setTrialIndex((current) => ({ ...current, step_3: nextIndex }));
+      }
+      return null;
     }
     
     return (
