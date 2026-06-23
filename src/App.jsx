@@ -336,7 +336,7 @@ function CompletionScreen({ completionUrl }) {
       <ScreenShell
         eyebrow="Completion"
         title="Thank you for participating"
-        description="You have finished all three evaluation steps and the study is complete. Thank you so much for your time and effort."
+        description="You have finished the selected steps for your session and the study is complete. Thank you so much for your time and effort."
       />
     );
   }
@@ -345,7 +345,7 @@ function CompletionScreen({ completionUrl }) {
       <ScreenShell
         eyebrow="Complete"
         title="Thank you for participating"
-        description="You have finished all three evaluation steps and the study is complete. Thank you so much for your time and effort. Please use the Prolific completion link below if it has not redirected automatically."
+        description="You have finished the selected steps for your session and the study is complete. Thank you so much for your time and effort. Please use the Prolific completion link below if it has not redirected automatically."
         footer={
           completionUrl ? (
             <a className="primary-button primary-button-link" href={completionUrl}>
@@ -375,7 +375,7 @@ function Step1Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_1} · ${phaseIndex + 1}/${totalTrials}`}
       title="Write an Original Caption"
-      description="Listen to the separate recordings of three different sources in the same physical space. Write a new caption from scratch that describes the acoustics of the space they are in. Keep it under 250 characters. "
+      description="In this step you must describe the acoustics of the space that the three different sources are in. Listen to all 3 three sources (located in the same room), then describe the space in your own words. Feel free to be creative and elaborate on specific nuances that you hear."
       footer={
         <button className="primary-button" type="button" onClick={() => onSubmit(text)} disabled={!text.trim() || submitting}>
           Submit &amp; Next
