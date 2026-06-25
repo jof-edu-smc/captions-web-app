@@ -527,7 +527,7 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
     return (
       <ScreenShell
         eyebrow="Training · Step 1"
-        title="Practice: Generative Captioning"
+        title="Practice: Writing Captions"
         description="In this step you must describe the acoustics of the space that the three different sources are in. Listen to all 3 three sources (located in the same room), then describe the space in your own words. Feel free to be creative and elaborate on specific nuances that you hear. NOTE: This is a practice screen, and the response is not saved; don't spend too much time on this page. Just try to get a feel for the task and move on to the next page."
         footer={
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
@@ -559,11 +559,12 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
         }} />
         
         <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
-          <span className="caption-label">Training: Examples of Captions</span>
+          <p><span className="caption-label">Training: Examples of Captions</span></p>
+          <p><span className="context-note" style={{ fontSize: '12px', marginTop: '4px' }}>(note that the example captions are not linked to the audio examples, but only examples of how you can describe a space)</span></p>
           <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <li>The room sounds very bright. The high frequencies are significantly accented, especially for the snare and cymbals. The late reverb tail is quite interesting -- There is a nice richness to it. The room feels to be large and spacious. The top of the space could have a dome like structure, producing a lush reverb.</li>
-            <li>The room feels uncomfortably small, a bit claustrophobic. The early reflections are very audible, indicating closely spaced walls. The room is coloured with a non-uniform frequency response.</li>
-            <li>Reflections are short and controlled, creating an intimate and close acoustic feel characteristic of a compact or well-damped room.</li>
+            <li>The room sounds very bright. The high frequencies are significantly accentuated, especially for the snare and cymbals. The late reverb tail is quite interesting—there is a nice richness to it. The room feels large and spacious. The ceiling might even have a dome-like structure, producing a lush reverberation.</li>
+            <li>The room feels uncomfortably small, almost claustrophobic. The early reflections are very audible, indicating closely spaced walls. The room sounds coloured, with a non-uniform frequency response.</li>
+            <li>The reflections are tight and controlled, arriving and fading quickly. Everything feels dry and close to the listener, almost as if recorded in a booth. The high frequencies are slightly muted, which makes the sound feel warm, though a bit dull.</li>
           </ul>
         </div>
 
