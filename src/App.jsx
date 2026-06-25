@@ -559,8 +559,8 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
         }} />
         
         <div className="caption-box caption-box-muted" style={{ marginBottom: '10px' }}>
-          <p><span className="caption-label">Training: Examples of Captions</span></p>
-          <p><span className="context-note" style={{ fontSize: '12px', marginTop: '4px' }}>(note that the example captions are not linked to the audio examples, but only examples of how you can describe a space)</span></p>
+          <p><span className="caption-label" style={{ fontSize: '18px'}}>Training: Examples of Captions</span></p>
+          <p><span className="context-note" style={{ fontSize: '14px', marginTop: '4px' }}>(note that the example captions are not linked to the audio examples, but only examples of how you can describe a space)</span></p>
           <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <li>The room sounds very bright. The high frequencies are significantly accentuated, especially for the snare and cymbals. The late reverb tail is quite interesting—there is a nice richness to it. The room feels large and spacious. The ceiling might even have a dome-like structure, producing a lush reverberation.</li>
             <li>The room feels uncomfortably small, almost claustrophobic. The early reflections are very audible, indicating closely spaced walls. The room sounds coloured, with a non-uniform frequency response.</li>
