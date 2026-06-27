@@ -572,9 +572,9 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
           <span className="caption-label">Practice caption</span>
           <textarea
             value={text}
-            onChange={(event) => setText(event.target.value.slice(0, 200))}
+            onChange={(event) => setText(event.target.value.slice(0, 250))}
             rows={6}
-            maxLength={200}
+            maxLength={250}
             placeholder="Type a practice caption here..."
           />
         </label>
