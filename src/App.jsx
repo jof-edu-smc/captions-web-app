@@ -336,7 +336,7 @@ function CompletionScreen({ completionUrl }) {
       <ScreenShell
         eyebrow="Completion"
         title="Thank you for participating"
-        description="You have finished the selected steps for your session and the study is complete. Thank you so much for your time and effort."
+        description="You have finished the selected steps for your session and the study is complete. Thank you so much for your time and effort. If you feel you can create more captions, please feel free to do so by refreshing the page. Otherwise, please close this tab."
       />
     );
   }
