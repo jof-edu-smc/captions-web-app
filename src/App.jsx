@@ -375,7 +375,7 @@ function Step1Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_1} · ${phaseIndex + 1}/${totalTrials}`}
       title="Write an Original Caption"
-      description="In this step you must describe the acoustics of the space that the three different sources are in. Listen to all 3 three sources (located in the same room), then describe the space in your own words. Feel free to be creative and elaborate on specific nuances that you hear."
+      description="In this step you must describe the acoustics of the space that the three different sources are in. Listen to all 3 three sources (located in the same room), then describe the space in your own words. Feel free to be creative and elaborate on specific nuances that you hear. Please write answers in English."
       footer={
         <button className="primary-button" type="button" onClick={() => onSubmit(text)} disabled={!text.trim() || submitting}>
           Submit &amp; Next
@@ -528,7 +528,7 @@ function TrainingStep1Screen({ trial, onSubmit, onGoBack }) {
       <ScreenShell
         eyebrow="Training · Step 1"
         title="Practice: Writing Captions"
-        description="In this step you must describe the acoustics of the space that the three different sources are in. Listen to all 3 three sources (located in the same room), then describe the space in your own words. Feel free to be creative and elaborate on specific nuances that you hear. NOTE: This is a practice screen, and the response is not saved; don't spend too much time on this page. Just try to get a feel for the task and move on to the next page."
+        description="In this step you must describe the acoustics of the space that the three different sources are in. Listen to all 3 three sources (located in the same room), then describe the space in your own words. Feel free to be creative and elaborate on specific nuances that you hear. NOTE: This is a practice screen, and the response is not saved; don't spend too much time on this page. Just try to get a feel for the task and move on to the next page. Please write answers in English."
         footer={
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
             <button 
