@@ -1,6 +1,6 @@
 # captions-web-app
 
-Lightweight Flask + React/Vite app for the acoustic captioning study.
+Lightweight Flask + React/Vite app for anonymously crowd-sourcing captions of digital audio files. This app can be deployed as a container on ECS or GCP instances and has environment variable webhooks for Google Sheets. To setup IAM credentials go to your cloud providers website for directions. A template of the Google sheet is `template_spreadsheet.csv`
 
 ## Notes 
 
