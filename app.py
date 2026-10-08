@@ -271,7 +271,7 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
     else:
         payload["caption_id"] = None
         payload["baseline_caption"] = None
-    print(payload)
+    
     return payload
 
 # def _get_pdf_urls() -> str:
@@ -314,7 +314,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
     for r in rows:
         p_step = r.processing_step.lower()
         caps = r.num_of_captions
-        # print(r)
+        
         # Step 1: Gathering phase, less than 5 captions
         if caps < 5 and p_step == 'gathering':
             step_1_pool.append(r)
@@ -378,7 +378,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         "training_step_1": training_urls,
         "training_step_2": training_urls,
     }
-    print(batches["step_3"])
+    
     return {
         "batch_id": uuid4().hex,
         "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
@@ -399,18 +399,18 @@ def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
     try:
         import gspread # type: ignore
         import google.auth # type: ignore
-        print(f"Appending record to {sheet_name}: {record} at {datetime.now(timezone.utc).isoformat()}")
+        # print(f"Appending record to {sheet_name}: {record} at {datetime.now(timezone.utc).isoformat()}")
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
         client = gspread.authorize(credentials)
-        print(f"Logged in with a {'Service Account' if hasattr(credentials, 'service_account_email') else 'unknown'} to Google Sheets at {datetime.now(timezone.utc).isoformat()}")
-        print(f"Opening Spreadsheet ID: {spreadsheet_id}, Sheet Name: {sheet_name}")
+        # print(f"Logged in with a {'Service Account' if hasattr(credentials, 'service_account_email') else 'unknown'} to Google Sheets at {datetime.now(timezone.utc).isoformat()}")
+        # print(f"Opening Spreadsheet ID: {spreadsheet_id}, Sheet Name: {sheet_name}")
         # Connect to the specific table/worksheet
         worksheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name)
-        print(f"Successfully opened worksheet {sheet_name}. Current row count: {worksheet.row_count} at {datetime.now(timezone.utc).isoformat()}")
+        # print(f"Successfully opened worksheet {sheet_name}. Current row count: {worksheet.row_count} at {datetime.now(timezone.utc).isoformat()}")
         # Ensure we write values in the exact order of the provided dictionary
         worksheet.append_row(list(record.values()))
-        print(f"Successfully appended row to {sheet_name} at {datetime.now(timezone.utc).isoformat()}. New row count: {worksheet.row_count}")
+        # print(f"Successfully appended row to {sheet_name} at {datetime.now(timezone.utc).isoformat()}. New row count: {worksheet.row_count}")
     except Exception as e:
         print(f"Error appending to {sheet_name}: {e}")
 
@@ -496,7 +496,7 @@ def get_stimuli() -> Any:
             seed_value=seed_value,
             session_id=session_id,
         )
-        print(f"Prepared stimuli payload for session {session_id}:")
+        
         payload["prolific_context"] = {
             "prolific_id": request.args.get("prolific_id", ""),
             "study_id": request.args.get("study_id", ""),
@@ -511,16 +511,14 @@ def get_stimuli() -> Any:
 @app.post("/api/submit-response")
 def submit_response() -> Any:
     payload = request.get_json(silent=True) or {}
-    # print("Received submission payload:")
-    # pp.pprint(payload)
+    
     phase = payload.get("phase")
     
     if phase not in {"step_1", "step_2", "step_3"}:
         return jsonify({"error": "phase must be one of step_1, step_2, or step_3"}), 400
 
     participant_context = payload.get("participant_context") or {}
-    # print("Participant context:")
-    # pp.pprint(participant_context)
+    
     stimulus = payload.get("stimulus") or {}
     
     # Common Identifiers
@@ -573,7 +571,6 @@ def submit_response() -> Any:
         })
         
         increment_caption_count(rir_id, target_col_name="num_of_captions")
-        print(f"Step 1 submission processed for RIR ID {rir_id} by annotator {annotator_id}. New caption added and count incremented.")
     # ----------------------------------------------------
     # ROUTE 2: Rephrasing/Editing -> captions_table
     # ----------------------------------------------------
@@ -604,7 +601,7 @@ def submit_response() -> Any:
         original_caption = get_caption_by_id(target_caption_id)
         if edited_text != original_caption:
             increment_caption_count(rir_id, target_col_name="num_of_captions")
-        print(f"Step 2 submission processed for RIR ID {rir_id} by annotator {annotator_id}. Edited caption added and count updated if changed.")
+        
     # ----------------------------------------------------
     # ROUTE 3: Evaluation -> evaluations_table
     # ----------------------------------------------------
@@ -639,7 +636,6 @@ def submit_response() -> Any:
         })
 
         increment_caption_count(rir_id, target_col_name="num_of_scored_captions")
-        print(f"Step 3 submission processed for RIR ID {rir_id} by annotator {annotator_id}. Evaluation recorded and scored caption count incremented.")
         
     return jsonify({"ok": True, "phase": phase})
 

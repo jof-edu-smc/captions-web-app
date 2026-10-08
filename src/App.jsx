@@ -533,8 +533,6 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
     return null;
   }
 
-  console.log(trial)
-
   const canSubmit = Boolean(selectAorB && !submitting);
   
   return (
@@ -1024,7 +1022,6 @@ export default function App() {
 
   if (phase === 'step_3') {
     const trial = step3Trials[trialIndex.step_3];
-    console.log("Current Step 3 Trial:", stimuli);
 
     if (!trial) {
       return null;
@@ -1040,11 +1037,6 @@ export default function App() {
           if (!trial || !selectedCaption) {
             return;
           }
-          console.log("Submitting Step 3 Response:", {
-            caption_a: trial.caption_a,
-            caption_b: trial.caption_b,
-            selected_caption: selectedCaption,
-          });
           await submitPhaseResponse('step_3', trial, {
             caption_a: trial.caption_a,
             caption_b: trial.caption_b,
