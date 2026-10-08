@@ -16,6 +16,27 @@ const NEXT_PHASE = {
   step_3: 'completion',
 };
 
+const STEP_PHASES = ['step_1', 'step_2', 'step_3'];
+
+function getAvailableSteps(trials) {
+  return STEP_PHASES.filter((step) => trials[step]?.length > 0);
+}
+
+function getNextAvailableStep(currentStep, availableSteps) {
+  const currentIndex = availableSteps.indexOf(currentStep);
+  return availableSteps[currentIndex + 1] || 'completion';
+}
+
+function getFirstTrainingPhase(availableSteps) {
+  if (availableSteps.includes('step_1')) {
+    return 'training_step_1';
+  }
+  if (availableSteps.includes('step_2')) {
+    return 'training_step_2';
+  }
+  return 'training_complete';
+}
+
 function parseQueryParams() {
   const params = new URLSearchParams(window.location.search);
   
@@ -112,6 +133,91 @@ function LikertScale({ value, onChange, name, ariaLabel, lowLabel, middleLabel, 
         <span style={{ gridColumn: 1 }}>{lowLabel}</span>
         {/* Force the high label into the 4th slot so it aligns perfectly */}
         <span style={{ gridColumn: 4 }}>{highLabel}</span> 
+      </div>
+    </div>
+  );
+}
+
+// This component is used to display two captions (A and B) for comparison, allowing the user to select which one they prefer. It takes in the current selected value, a callback for when the selection changes, and the two caption texts.
+function CaptionAndB({ trial, selectedCaption, onChange }) {
+  if (!trial) return null;
+  return (
+    <div className="caption-shell">
+      <div className="caption-box caption-box-muted caption-comparison-context">
+          <div className="caption-context-section">
+            <h3>Acoustic profile</h3>
+            <dl className="acoustic-metadata">
+              <div><dt>Location</dt><dd>{trial.metadata?.location || 'Not available'}</dd></div>
+              <div><dt>RT60</dt><dd>{trial.metadata?.rt60 || 'Not available'}</dd></div>
+              <div><dt>DRR</dt><dd>{trial.metadata?.drr || 'Not available'}</dd></div>
+              <div><dt>C50</dt><dd>{trial.metadata?.c50 || 'Not available'}</dd></div>
+              <div><dt>C80</dt><dd>{trial.metadata?.c80 || 'Not available'}</dd></div>
+              <div><dt>D50</dt><dd>{trial.metadata?.d50 || 'Not available'}</dd></div>
+            </dl>
+          </div>
+          <div className="caption-context-section">
+            <h3>Captions to compare</h3>
+            <div className="comparison-captions">
+              <div className="comparison-caption">
+                <span className="comparison-caption-label">Caption A</span>
+                <p>{trial.caption_a || 'Not available'}</p>
+              </div>
+              <div className="comparison-caption">
+                <span className="comparison-caption-label">Caption B</span>
+                <p>{trial.caption_b || 'Not available'}</p>
+              </div>
+            </div>
+          </div>
+      </div>
+      <div className="caption-scale" role="radiogroup" aria-label="Select the best caption">
+        <label className={`caption-option ${selectedCaption === 'A' ? 'caption-option-active' : ''}`} htmlFor="captionA">
+          {/* <strong>Caption A</strong>  */}
+          <input
+            type="radio"
+            id="captionA"
+            name="captionChoice"
+            value="A"
+            checked={selectedCaption === 'A'}
+            onChange={() => onChange('A')}
+          />
+          <span><b>Caption A</b></span>
+        </label>
+        <label className={`caption-option ${selectedCaption === 'B' ? 'caption-option-active' : ''}`} htmlFor="captionB">
+          {/* <strong>Caption B</strong>  */}
+          <input
+            type="radio"
+            id="captionB"
+            name="captionChoice"
+            value="B"
+            checked={selectedCaption === 'B'}
+            onChange={() => onChange('B')}
+          />
+          <span><b>Caption B</b></span>
+        </label>
+        <label className={`caption-option ${selectedCaption === 'Neither' ? 'caption-option-active' : ''}`} htmlFor="captionNeither">
+          {/* <strong>Neither</strong>  */}
+          <input
+            type="radio"
+            id="captionNeither"
+            name="captionChoice"
+            value="Neither"
+            checked={selectedCaption === 'Neither'}
+            onChange={() => onChange('Neither')}
+          />
+          <span><b>Neither</b></span>
+        </label>
+        <label className={`caption-option ${selectedCaption === 'Both' ? 'caption-option-active' : ''}`} htmlFor="captionBoth">
+          {/* <strong>Both</strong>  */}
+          <input
+            type="radio"
+            id="captionBoth"
+            name="captionChoice"
+            value="Both"
+            checked={selectedCaption === 'Both'}
+            onChange={() => onChange('Both')}
+          />
+          <span><b>Both</b></span>
+        </label>
       </div>
     </div>
   );
@@ -230,15 +336,15 @@ function AudioBlock({ trial, caption, baseline, showCaption = false, showBaselin
   );
 }
 
-function IntroScreen({ completionUrl, pisUrl, cfUrl, onContinue }) {
+function IntroScreen({ completionUrl, onContinue }) {
   return (
     <ScreenShell
       eyebrow="Welcome"
       title="Acoustic Caption Survey"
-      description="Please download & read the Participant Information Sheet and Consent Sheet informing what you consent to by taking part in the study."
+      description="This survey asks you to listen to three audio clips that are all located in the same space, and select which caption is better than the other."
       footer={
-        <button className="primary-button" type="button" onClick={onContinue} disabled={!pisUrl}>
-          Consent & Proceed
+        <button className="primary-button" type="button" onClick={onContinue}>
+          Proceed
         </button>
       }
     >
@@ -246,23 +352,9 @@ function IntroScreen({ completionUrl, pisUrl, cfUrl, onContinue }) {
         <span className="caption-label">Create Caption</span> */}
       <div className="intro-grid">
         <label className="text-area-shell">
-          <span><b>By clicking "Consent & Proceed" you agree and understand the points in the Consent Form and Participant Information Sheet.</b></span>
+          <span><b>Click Proceed to start the survey where you will be selecting between an A and a B caption. More instructions to follow.</b></span>
           <span>Additionally, please <b>turn off any VPN</b> temporarily should you proceed with the survey.</span>
         </label>
-        {pisUrl ? (
-          <a className="secondary-link" href={pisUrl} target="_blank" rel="noreferrer">
-            Open Participant Information Sheet (PDF)
-          </a>
-        ) : (
-          <span className="context-note">Loading Participant Information to Download...</span>
-        )}
-        {cfUrl ? (
-          <a className="secondary-link" href={cfUrl} target="_blank" rel="noreferrer">
-            Open Consent Sheet (PDF)
-          </a>
-        ) : (
-          <span className="context-note">Loading Consent Sheet to Download...</span>
-        )}
         {completionUrl ? <p className="context-note">Prolific completion link detected and will be used at the end of the study.</p> : null}
       </div>
     </ScreenShell>
@@ -330,13 +422,13 @@ function CompletionScreen({ completionUrl }) {
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [completionUrl]);
-  console.log("Completion URL:", completionUrl);
+  
   if (completionUrl === null || completionUrl === undefined || completionUrl === '') {
     return (
       <ScreenShell
         eyebrow="Completion"
         title="Thank you for participating"
-        description="You have finished the selected steps for your session and the study is complete. Thank you so much for your time and effort. If you feel you can create more captions, please feel free to do so by refreshing the page. Otherwise, please close this tab."
+        description="You have finished the selected steps for your session and the study is complete. Thank you so much for your time and effort."
       />
     );
   }
@@ -431,47 +523,48 @@ function Step2Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
 }
 
 function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
-  const [grammarRating, setGrammarRating] = useState('');
-  const [accuracyRating, setAccuracyRating] = useState('');
+  const [selectAorB, setSelectAorB] = useState('');
 
   useEffect(() => {
-    setGrammarRating('');
-    setAccuracyRating('');
+    setSelectAorB('');
   }, [trial?.trial_index]);
 
   if (!trial) {
     return null;
   }
 
-  const canSubmit = Boolean(grammarRating && accuracyRating && !submitting);
+  console.log(trial)
+
+  const canSubmit = Boolean(selectAorB && !submitting);
   
   return (
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_3} · ${phaseIndex + 1}/${totalTrials}`}
-      title="Grammar and Accuracy Ratings"
-      description="Rate the caption on grammar correctness and how accurately it describes the acoustics."
+      title="Compare Captions"
+      description="Listen to the three audio files below and follow the directions under 'Select Best Caption'"
       footer={
-        <button className="primary-button" type="button" onClick={() => onSubmit(grammarRating, accuracyRating)} disabled={!canSubmit}>
+        <button className="primary-button" type="button" onClick={() => onSubmit(selectAorB)} disabled={!canSubmit}>
           Submit & Next
         </button>
       }
     >
-      <AudioBlock trial={trial} baseline={trial.baseline_caption} showBaseline />
+      <AudioBlock trial={trial} baseline={trial.baseline_caption} />
       <section className="stack">
         <div className="field-group">
-          <div className="field-heading">
-            <h2>Grammar Correctness</h2>
-            <p>Rate the grammar of the caption.</p>
+          <div className="field-heading" style={{ "margin-bottom": "12px" }}>
+            <h1>Select the Best Caption</h1>
+            <p>Select whether <b>Caption A or B most accurately describes the acoustics of the space</b> by listening to the three audio files you can play below. If <b>none</b> of them effectively describe the acoustics of the space, then <b>select the Neither option</b>. If <b>both</b> of them are equally effective, then <b>select the Both option</b>.</p>
           </div>
-          <GrammarScale value={grammarRating} onChange={setGrammarRating} />
+          <CaptionAndB trial={trial} selectedCaption={selectAorB} onChange={setSelectAorB} />
+          {/* <GrammarScale value={grammarRating} onChange={setGrammarRating} /> */}
         </div>
-        <div className="field-group">
+        {/* <div className="field-group">
           <div className="field-heading">
             <h2>Accuracy of the Description</h2>
             <p>How accurately does the caption describe the space the performances are located in?</p>
           </div>
           <AccuracyScale value={accuracyRating} onChange={setAccuracyRating} />
-        </div>
+        </div> */}
       </section>
     </ScreenShell>
   );
@@ -640,7 +733,7 @@ function TrainingCompleteScreen({ onProceed, onGoBack }) {
     <ScreenShell
       eyebrow="Training Complete"
       title="Ready to begin the actual survey?"
-      description="You have finished the practice rounds. The next screens will use the real audio dataset, and your responses will be recorded. Are you sure you are ready to proceed?"
+      description="The next screens will use the real audio dataset, and your responses will be recorded. Are you sure you are ready to proceed?"
       footer={
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%' }}>
           <button 
@@ -673,8 +766,6 @@ export default function App() {
   const [phase, setPhase] = useState('loading');
   const [stimuli, setStimuli] = useState(null);
   const [training, setTraining] = useState(null);
-  const [pisUrl, setPisUrl] = useState('');
-  const [cfUrl, setCfUrl] = useState('');
   const [demographics, setDemographics] = useState({ age_range: '', experience_in_audio: '', hearing: '' });
   const [trialIndex, setTrialIndex] = useState({ 
       training_step_1: 0,
@@ -705,9 +796,6 @@ export default function App() {
         setStimuli(data.stimuli);
         setStatusMessage('Setting up Training Steps')
         setTraining(data.training);
-        setStatusMessage('Fetching Participant Information Sheet')
-        setPisUrl(data.pis_url);
-        setCfUrl(data.cf_url);
         setStatusMessage('Survey ready.');
         
         logToServer('INFO', 'Session successfully loaded and ready', { 
@@ -764,10 +852,18 @@ export default function App() {
       setSubmitting(false);
     }
   }
-
+  
   const step1Trials = stimuli?.step_1 || [];
   const step2Trials = stimuli?.step_2 || [];
   const step3Trials = stimuli?.step_3 || [];
+  const trialsByStep = { step_1: step1Trials, step_2: step2Trials, step_3: step3Trials };
+  const availableSteps = getAvailableSteps(trialsByStep);
+
+  useEffect(() => {
+    if (phase === 'training_complete' && !availableSteps.length) {
+      setPhase('completion');
+    }
+  }, [phase, availableSteps.length]);
 
   if (statusMessage.startsWith('Stimulus request failed') || statusMessage.startsWith('Failed to load')) {
     return (
@@ -779,8 +875,6 @@ export default function App() {
     return (
       <IntroScreen
         completionUrl={completionUrl}
-        pisUrl={pisUrl} 
-        cfUrl={cfUrl}
         onContinue={() => setPhase('demographics')}
       />
     );
@@ -796,7 +890,6 @@ export default function App() {
             setPhase('blocked');
             return;
           }
-          // Redirect to calibration instead of training
           setPhase('headphone_calibration'); 
         }}
       />
@@ -808,7 +901,7 @@ export default function App() {
     return (
       <HeadphoneAdjustmentScreen 
         trial={trial}
-        onSubmit={() => setPhase('training_step_1')} 
+        onSubmit={() => setPhase(getFirstTrainingPhase(availableSteps))} 
         onGoBack={() => setPhase('demographics')} 
       />
     );
@@ -820,27 +913,10 @@ export default function App() {
 
   if (phase === 'training_step_1') {
     const trial = training?.training_step_1;
-    const step_1 = step1Trials[trialIndex.step_1];
-    if (!step_1) {
-      setPhase('training_step_2');
-      return null; // Prevent rendering the next screen until the phase is updated
-      // return (
-      //   <ScreenShell
-      //     eyebrow="Phase Skipped"
-      //     title="No Editing Trials Available"
-      //     description="There are currently no captions in the database that require editing."
-      //     footer={
-      //       <button className="primary-button" onClick={() => setPhase('training_step_2')}>
-      //         Continue
-      //       </button>
-      //     }
-      //   />
-      // );
-    }
     return (
       <TrainingStep1Screen 
         trial={trial}
-        onSubmit={() => setPhase('training_step_2')}
+        onSubmit={() => setPhase(availableSteps.includes('step_2') ? 'training_step_2' : 'training_complete')}
         onGoBack={() => setPhase('headphone_calibration')} 
       />
     );
@@ -848,23 +924,6 @@ export default function App() {
 
   if (phase === 'training_step_2') {
     const trial = training?.training_step_2;
-    const step_2 = step2Trials[trialIndex.step_2];
-    if (!step_2) {
-      setPhase('training_complete');
-      return null; // Prevent rendering the next screen until the phase is updated
-      // return (
-      //   <ScreenShell
-      //     eyebrow="Phase Skipped"
-      //     title="No Editing Trials Available"
-      //     description="There are currently no captions in the database that require editing."
-      //     footer={
-      //       <button className="primary-button" onClick={() => setPhase('training_complete')}>
-      //         Continue
-      //       </button>
-      //     }
-      //   />
-      // );
-    }
     return (
       <TrainingStep2Screen 
         trial={trial}
@@ -875,20 +934,25 @@ export default function App() {
   }
 
   if (phase === 'training_complete') {
-    if (!step1Trials.length & !step2Trials.length) {
-      setPhase('step_1');
+    if (!availableSteps.length) {
       return null;
     }
+
     return (
-      <TrainingCompleteScreen 
-        onProceed={() => setPhase('step_1')} 
-        onGoBack={() => setPhase('training_step_2')} 
+      <TrainingCompleteScreen
+        onProceed={() => setPhase(availableSteps[0])}
+        onGoBack={() => setPhase(getFirstTrainingPhase(availableSteps) === 'training_complete' ? 'headphone_calibration' : getFirstTrainingPhase(availableSteps))}
       />
     );
   }
 
   if (phase === 'step_1') {
     const trial = step1Trials[trialIndex.step_1];
+
+    if (!trial) {
+      return null;
+    }
+
     return (
       <Step1Screen
         trial={trial}
@@ -914,7 +978,7 @@ export default function App() {
 
           const nextIndex = trialIndex.step_1 + 1;
           if (nextIndex >= step1Trials.length) {
-            setPhase(NEXT_PHASE.step_1);
+            setPhase(getNextAvailableStep('step_1', availableSteps));
             setTrialIndex((current) => ({ ...current, step_1: 0 }));
           } else {
             setTrialIndex((current) => ({ ...current, step_1: nextIndex }));
@@ -926,16 +990,8 @@ export default function App() {
 
   if (phase === 'step_2') {
     const trial = step2Trials[trialIndex.step_2];
-    console.log("Current Step 2 Trial:", trial);
 
     if (!trial) {
-      const nextIndex = trialIndex.step_2 + 1;
-      if (nextIndex >= step2Trials.length) {
-        setPhase(NEXT_PHASE.step_2);
-        setTrialIndex((current) => ({ ...current, step_2: 0 }));
-      } else {
-        setTrialIndex((current) => ({ ...current, step_2: nextIndex }));
-      }
       return null; 
     }
 
@@ -956,7 +1012,7 @@ export default function App() {
           });
           const nextIndex = trialIndex.step_2 + 1;
           if (nextIndex >= step2Trials.length) {
-            setPhase(NEXT_PHASE.step_2);
+            setPhase(getNextAvailableStep('step_2', availableSteps));
             setTrialIndex((current) => ({ ...current, step_2: 0 }));
           } else {
             setTrialIndex((current) => ({ ...current, step_2: nextIndex }));
@@ -968,15 +1024,9 @@ export default function App() {
 
   if (phase === 'step_3') {
     const trial = step3Trials[trialIndex.step_3];
-    console.log("Current Step 3 Trial:", trial);
+    console.log("Current Step 3 Trial:", stimuli);
 
     if (!trial) {
-      const nextIndex = trialIndex.step_3 + 1;
-      if (nextIndex >= step3Trials.length) {
-        setPhase(NEXT_PHASE.step_3);
-      } else {
-        setTrialIndex((current) => ({ ...current, step_3: nextIndex }));
-      }
       return null;
     }
     
@@ -986,14 +1036,19 @@ export default function App() {
         phaseIndex={trialIndex.step_3}
         totalTrials={step3Trials.length}
         submitting={submitting}
-        onSubmit={async (grammarRating, accuracyRating) => {
-          if (!trial || !grammarRating || !accuracyRating) {
+        onSubmit={async (selectedCaption) => {
+          if (!trial || !selectedCaption) {
             return;
           }
+          console.log("Submitting Step 3 Response:", {
+            caption_a: trial.caption_a,
+            caption_b: trial.caption_b,
+            selected_caption: selectedCaption,
+          });
           await submitPhaseResponse('step_3', trial, {
-            caption_id: trial.caption_id,
-            grammar_rating: grammarRating,
-            accuracy_rating: accuracyRating,
+            caption_a: trial.caption_a,
+            caption_b: trial.caption_b,
+            selected_caption: selectedCaption,
           });
           const nextIndex = trialIndex.step_3 + 1;
           if (nextIndex >= step3Trials.length) {

@@ -58,8 +58,10 @@ class StimulusRow:
     processing_step: str
     num_of_captions: int
     num_of_scored_captions: int
-    captions: list[dict[str, str]]
-
+    human_captions: list[str]
+    synthetic_captions: list[str]
+    caption_ids: list[str]
+    metadata: dict[str, Any]
 
 def _clean_value(value: Any) -> str:
     if value is None:
@@ -83,12 +85,14 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
         spreadsheet = client.open_by_key(spreadsheet_id)
 
         # 1. Fetch both relational tables
-        audio_records = spreadsheet.worksheet("audio_stimuli").get_all_records()
+        audio_stimuli = spreadsheet.worksheet("audio_stimuli").get_all_records()
         caption_records = spreadsheet.worksheet("captions_table").get_all_records()
 
         # 2. Group captions by their foreign key (audio_id)
-        captions_by_rir = {}
+        captions_by_rir = {"comparisons": []}
+        
         for cap in caption_records:
+            # print(f"Processing caption record: {cap}")
             r_id = str(cap.get("rir_id", "")).strip()
             
             if str(cap.get("session_id", "")).strip() == session_id:
@@ -96,21 +100,34 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
             
             if r_id not in captions_by_rir:
                 captions_by_rir[r_id] = []
-                
+                            
             captions_by_rir[r_id].append(cap)
-        
+            
         rows = []
         # 3. Construct the flat StimulusRow objects for the frontend
-        for rir in audio_records:
+        for rir in audio_stimuli:
             rir_id = str(rir.get("rir_id", "")).strip()
             
             # print(f"Processing RIR record with ID: {rir_id}")
             if not rir_id:
                 continue
             
-            
             # Fetch all captions linked to this audio file
             linked_captions = captions_by_rir.get(rir_id, [])
+            caption_ids = [str(c.get("caption_id", "")).strip() for c in linked_captions if c.get("caption_id")]
+            human_captions = [c.get("human_caption", "").strip() for c in linked_captions if c.get("human_caption")]
+            synthetic_captions = [c.get("synthetic_caption", "").strip() for c in linked_captions if c.get("synthetic_caption")]
+            
+            metadata = {
+                "duration_seconds": float(rir.get("duration_seconds", 0)),
+                "location": str(rir.get("location_tags", "")),
+                "sample_rate": int(rir.get("sample_rate", "")) if str(rir.get("sample_rate", "")).isdigit() else 0,
+                "rt60": float(rir.get("rt60", 0)),
+                "drr": float(rir.get("drr", 0)),
+                "c50": float(rir.get("c50", 0)),
+                "c80": float(rir.get("c80", 0)), 
+                "d50": float(rir.get("d50", 0)),
+            }
             
             raw_num = str(rir.get("num_of_captions", "0")).strip()
             num_captions = int(raw_num) if raw_num.isdigit() else 0
@@ -120,13 +137,16 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
             
             row = StimulusRow(
                 rir_id=rir_id,
-                audio_clap_id=rir.get("audio_clap_id", "").strip(),
-                audio_music_id=rir.get("audio_music_id", "").strip(),
-                audio_speech_id=rir.get("audio_speech_id", "").strip(),
-                processing_step=rir.get("processing_step", "").strip(),
+                audio_clap_id=str(rir.get("audio_clap_id", "")).strip(),
+                audio_music_id=str(rir.get("audio_music_id", "")).strip(),
+                processing_step=str(rir.get("processing_step", "")).strip(),  
+                audio_speech_id=str(rir.get("audio_speech_id", "")).strip(),
                 num_of_captions=num_captions,
                 num_of_scored_captions=num_scored_captions,
-                captions=linked_captions,
+                human_captions=human_captions,
+                synthetic_captions=synthetic_captions,
+                caption_ids=caption_ids,
+                metadata=metadata
             )
             rows.append(row)
         if not rows:
@@ -204,7 +224,6 @@ def generate_presigned_url(bucket_name: str, object_path: str, expiration: int =
         traceback.print_exc()
         return ""
     
-
 def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: random.Random) -> dict[str, Any]:
     # Extract file names
     clap_file = Path(row.audio_clap_id).name
@@ -235,53 +254,58 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
         "clap_file_url": secure_urls.get(clap_file, f"/audio/claps/{clap_file}"),
         "music_file_url": secure_urls.get(music_file, f"/audio/music/{music_file}"),
         "speech_file_url": secure_urls.get(speech_file, f"/audio/speech/{speech_file}"),
+        "metadata": row.metadata,
     }
-    # print(f"Base payload for trial {trial_index} in {phase}: {payload}")
+    
     # Assign a random caption for editing/evaluating if the phase requires it
-    if phase in ["step_2", "step_3"] and row.captions:
-        selected_caption = rng.choice(row.captions)
-        payload["caption_id"] = selected_caption.get("caption_id")
-        # Naming it 'baseline_caption' here matches your App.jsx expectations
-        payload["baseline_caption"] = selected_caption.get("caption_text") 
+    if phase == "step_2" and row.human_captions:
+        selected_caption = rng.choice(row.human_captions)
+        index_sel_cap = row.human_captions.index(selected_caption)
+        payload["caption_id"] = row.caption_ids[index_sel_cap]
+        payload["baseline_caption"] = selected_caption
+
+    if phase == "step_3" and row.human_captions and row.synthetic_captions:
+        comparison = [rng.choice(row.human_captions), rng.choice(row.synthetic_captions)]
+        rng.shuffle(comparison)
+        payload["caption_a"], payload["caption_b"] = comparison
     else:
         payload["caption_id"] = None
         payload["baseline_caption"] = None
-
+    print(payload)
     return payload
 
-def _get_pdf_urls() -> str:
-    """Finds the PIS PDF in the GCP bucket and returns a presigned URL."""
-    try:
-        gcp_project = os.getenv("GCP_PROJECT_ID")
-        storage_client = storage.Client(project=gcp_project)
-        bucket = storage_client.bucket("stimuli")
+# def _get_pdf_urls() -> str:
+#     """Finds the PIS PDF in the GCP bucket and returns a presigned URL."""
+#     try:
+#         gcp_project = os.getenv("GCP_PROJECT_ID")
+#         storage_client = storage.Client(project=gcp_project)
+#         bucket = storage_client.bucket("stimuli")
         
-        # List all files in the 'pdfs/' folder
-        blobs = bucket.list_blobs(prefix="pdfs/")
+#         # List all files in the 'pdfs/' folder
+#         blobs = bucket.list_blobs(prefix="pdfs/")
         
-        pis_url = ""
-        cf_url = ""
+#         pis_url = ""
+#         cf_url = ""
         
-        for blob in blobs:
-            # Look for a PDF with 'PIS' in the name
-            if "PIS" in blob.name.upper() and blob.name.lower().endswith("_latest.pdf"):
-                # Expiration set to 1 hour (3600 seconds)
-                pis_url = generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
-            if "Consent-Form" in blob.name and blob.name.lower().endswith("_latest.pdf"):
-                cf_url = generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
-        return {
-            "pis_url": pis_url, 
-            "cf_url": cf_url,
-        }
-    except Exception as e:
-        print(f"Error fetching PIS PDF url: {e}")
-        return ""
+#         for blob in blobs:
+#             # Look for a PDF with 'PIS' in the name
+#             if "PIS" in blob.name.upper() and blob.name.lower().endswith("_latest.pdf"):
+#                 # Expiration set to 1 hour (3600 seconds)
+#                 pis_url = generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
+#             if "Consent-Form" in blob.name and blob.name.lower().endswith("_latest.pdf"):
+#                 cf_url = generate_presigned_url("stimuli", blob.name, expiration=URL_EXPIRATION)
+#         return {
+#             "pis_url": pis_url, 
+#             "cf_url": cf_url,
+#         }
+#     except Exception as e:
+#         print(f"Error fetching PIS PDF url: {e}")
+#         return ""
 
 def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, seed_value: str | None, session_id: str) -> dict[str, Any]:
     
     rng = _make_rng(seed_value)
     rows = _load_stimuli(session_id)
-    print(f"Loaded {len(rows)} stimulus rows from the database for session {session_id}.")
     # 1. Partition the pools based on your new processing rules
     step_1_pool = []
     step_2_pool = []
@@ -329,9 +353,13 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
     elif len(available_for_step_2) < step_2_trials:
         print(f"Warning: Only {len(available_for_step_2)} eligible rows for Step 2 after filtering, but {step_2_trials} trials requested.")
         
-    # print(f"Used RIR IDs after Step 2: {len(rows)} - {len(used_rir_ids)}")
     # 4. Select Step 3 (Excluding anything used in Step 1 or 2)
-    available_for_step_3 = [r for r in step_3_pool if r.rir_id not in used_rir_ids]
+    available_for_step_3 = [
+        r for r in step_3_pool
+        if r.rir_id not in used_rir_ids
+        and len(r.synthetic_captions) > 0
+        and len(r.human_captions) > 0
+    ]
     if len(available_for_step_3) >= step_3_trials:
         step_3_selected = _pick_rows(available_for_step_3, step_3_trials, rng)
         for i, row in enumerate(step_3_selected):
@@ -350,14 +378,14 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         "training_step_1": training_urls,
         "training_step_2": training_urls,
     }
-    
+    print(batches["step_3"])
     return {
         "batch_id": uuid4().hex,
         "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
         "training": training_payload,
         "stimuli": batches,
-        "pis_url": _get_pdf_urls()["pis_url"],
-        "cf_url": _get_pdf_urls()["cf_url"],
+        # "pis_url": _get_pdf_urls()["pis_url"],
+        # "cf_url": _get_pdf_urls()["cf_url"],
     }
 
 def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
@@ -581,11 +609,14 @@ def submit_response() -> Any:
     # ROUTE 3: Evaluation -> evaluations_table
     # ----------------------------------------------------
     elif phase == "step_3":
-        grammar = payload.get("grammar_rating")
-        accuracy = payload.get("accuracy_rating")
+        caption_a = _clean_value(payload.get("caption_a"))
+        caption_b = _clean_value(payload.get("caption_b"))
+        selected_caption = _clean_value(payload.get("selected_caption"))
         
-        if not grammar or not accuracy:
-            return jsonify({"error": "step_3 requires grammar_rating and accuracy_rating"}), 400
+        if not caption_a or not caption_b:
+            return jsonify({"error": "step_3 requires caption_a and caption_b"}), 400
+        if selected_caption not in {"A", "B", "Neither"}:
+            return jsonify({"error": "step_3 selected_caption must be A, B, or Neither"}), 400
         
         append_row_to_sheet("annotators_table", {
             "prolific_id": annotator_id,
@@ -598,12 +629,13 @@ def submit_response() -> Any:
             "hearing_impairment": participant_context.get("hearing", ""),
         })
             
-        append_row_to_sheet("evaluations_table", {
+        # append_row_to_sheet("evaluations_table", {
+        append_row_to_sheet("ab_eval_table", {
             "evaluation_id": uuid4().hex,
-            "caption_id": target_caption_id, 
-            "annotator_id": annotator_id,
-            "accuracy_score": int(accuracy),
-            "fluency_score": int(grammar)
+            "prolific_id": annotator_id,
+            "caption_a": caption_a,
+            "caption_b": caption_b,
+            "selected_caption": selected_caption,
         })
 
         increment_caption_count(rir_id, target_col_name="num_of_scored_captions")
