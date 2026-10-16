@@ -150,11 +150,19 @@ function CaptionAndB({ trial, selectedCaption, onChange }) {
               <div><dt>Location</dt><dd>{trial.metadata?.location || 'Not available'}</dd></div>
               <div><dt>RT60</dt><dd>{trial.metadata?.rt60 || 'Not available'}</dd></div>
               <div><dt>DRR</dt><dd>{trial.metadata?.drr || 'Not available'}</dd></div>
-              <div><dt>C50</dt><dd>{trial.metadata?.c50 || 'Not available'}</dd></div>
+              {/* <div><dt>C50</dt><dd>{trial.metadata?.c50 || 'Not available'}</dd></div>
               <div><dt>C80</dt><dd>{trial.metadata?.c80 || 'Not available'}</dd></div>
-              <div><dt>D50</dt><dd>{trial.metadata?.d50 || 'Not available'}</dd></div>
+              <div><dt>D50</dt><dd>{trial.metadata?.d50 || 'Not available'}</dd></div> */}
             </dl>
+            {trial.metadata?.image_link && (
+              <img
+                src={trial.metadata.image_link}
+                alt="Acoustic profile"
+                style={{ display: 'block', maxWidth: '100%', height: 'auto', marginTop: '1rem' }}
+              />
+            )}
           </div>
+          
           <div className="caption-context-section">
             <h3>Captions to compare</h3>
             <div className="comparison-captions">
@@ -237,12 +245,12 @@ function GrammarScale({ value, onChange }) {
   );
 }
 
-function AccuracyScale({ value, onChange }) {
+function AccuracyScale({ value, onChange, name }) {
   return (
     <LikertScale
       value={value}
       onChange={onChange}
-      name="accuracy"
+      name={name}
       ariaLabel="Accuracy of the description rating"
       lowLabel="Bad"
       middleLabel="OK"
@@ -524,16 +532,20 @@ function Step2Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
 
 function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
   const [selectAorB, setSelectAorB] = useState('');
+  const [accuracyRatingA, setAccuracyRatingA] = useState('');
+  const [accuracyRatingB, setAccuracyRatingB] = useState('');
 
   useEffect(() => {
     setSelectAorB('');
+    setAccuracyRatingA('');
+    setAccuracyRatingB('');
   }, [trial?.trial_index]);
 
   if (!trial) {
     return null;
   }
 
-  const canSubmit = Boolean(selectAorB && !submitting);
+  const canSubmit = Boolean(selectAorB && accuracyRatingA && accuracyRatingB && !submitting);
   
   return (
     <ScreenShell
@@ -541,28 +553,31 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
       title="Compare Captions"
       description="Listen to the three audio files below and follow the directions under 'Select Best Caption'"
       footer={
-        <button className="primary-button" type="button" onClick={() => onSubmit(selectAorB)} disabled={!canSubmit}>
+        <button className="primary-button" type="button" onClick={() => onSubmit(selectAorB, accuracyRatingA, accuracyRatingB)} disabled={!canSubmit}>
           Submit & Next
         </button>
       }
     >
-      <AudioBlock trial={trial} baseline={trial.baseline_caption} />
+      {/* <AudioBlock trial={trial} baseline={trial.baseline_caption} /> */}
       <section className="stack">
         <div className="field-group">
-          <div className="field-heading" style={{ "margin-bottom": "12px" }}>
+          <div className="field-heading" style={{ marginBottom: '12px' }}>
             <h1>Select the Best Caption</h1>
             <p>Select whether <b>Caption A or B most accurately describes the acoustics of the space</b> by listening to the three audio files you can play below. If <b>none</b> of them effectively describe the acoustics of the space, then <b>select the Neither option</b>. If <b>both</b> of them are equally effective, then <b>select the Both option</b>.</p>
           </div>
           <CaptionAndB trial={trial} selectedCaption={selectAorB} onChange={setSelectAorB} />
           {/* <GrammarScale value={grammarRating} onChange={setGrammarRating} /> */}
         </div>
-        {/* <div className="field-group">
+        <div className="field-group">
           <div className="field-heading">
             <h2>Accuracy of the Description</h2>
             <p>How accurately does the caption describe the space the performances are located in?</p>
           </div>
-          <AccuracyScale value={accuracyRating} onChange={setAccuracyRating} />
-        </div> */}
+          <h2>Caption A</h2>
+          <AccuracyScale value={accuracyRatingA} onChange={setAccuracyRatingA} name="accuracy-a" />
+          <h2>Caption B</h2>
+          <AccuracyScale value={accuracyRatingB} onChange={setAccuracyRatingB} name="accuracy-b" />
+        </div>
       </section>
     </ScreenShell>
   );
@@ -764,6 +779,7 @@ export default function App() {
   const [phase, setPhase] = useState('loading');
   const [stimuli, setStimuli] = useState(null);
   const [training, setTraining] = useState(null);
+  const [showAudioFiles, setShowAudioFiles] = useState(true);
   const [demographics, setDemographics] = useState({ age_range: '', experience_in_audio: '', hearing: '' });
   const [trialIndex, setTrialIndex] = useState({ 
       training_step_1: 0,
@@ -792,6 +808,7 @@ export default function App() {
         const data = await response.json();
         setStatusMessage('Gathering Audio Files.')
         setStimuli(data.stimuli);
+        setShowAudioFiles(data.show_audio_files !== false);
         setStatusMessage('Setting up Training Steps')
         setTraining(data.training);
         setStatusMessage('Survey ready.');
@@ -888,7 +905,7 @@ export default function App() {
             setPhase('blocked');
             return;
           }
-          setPhase('headphone_calibration'); 
+          setPhase(showAudioFiles ? 'headphone_calibration' : getFirstTrainingPhase(availableSteps));
         }}
       />
     );
@@ -1033,14 +1050,16 @@ export default function App() {
         phaseIndex={trialIndex.step_3}
         totalTrials={step3Trials.length}
         submitting={submitting}
-        onSubmit={async (selectedCaption) => {
-          if (!trial || !selectedCaption) {
+        onSubmit={async (selectedCaption, accuracyRatingA, accuracyRatingB) => {
+          if (!trial || !selectedCaption || !accuracyRatingA || !accuracyRatingB) {
             return;
           }
           await submitPhaseResponse('step_3', trial, {
             caption_a: trial.caption_a,
             caption_b: trial.caption_b,
             selected_caption: selectedCaption,
+            accuracy_score_a: accuracyRatingA,
+            accuracy_score_b: accuracyRatingB,
           });
           const nextIndex = trialIndex.step_3 + 1;
           if (nextIndex >= step3Trials.length) {

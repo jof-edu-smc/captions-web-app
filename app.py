@@ -18,6 +18,8 @@ from flask_cors import CORS # type: ignore
 
 pp = pprint.PrettyPrinter(indent=4)
 
+load_dotenv()
+
 # Define your absolute paths first
 APP_DIR = Path(__file__).resolve().parent
 AUDIO_DIR = APP_DIR / "audio"
@@ -28,6 +30,7 @@ STEP_2_TRIALS = int(os.getenv("STEP_2_TRIALS", "5"))
 STEP_3_TRIALS = int(os.getenv("STEP_3_TRIALS", "5"))
 
 URL_EXPIRATION = int(os.getenv("URL_EXPIRATION", "3600"))  # Default to 3600 seconds if not set 
+SHOW_AUDIO_FILES = os.getenv("SHOW_AUDIO_FILES", "True").strip().lower() in {"1", "true", "yes", "on"}
 
 STIMULUS_CANDIDATES = [
     APP_DIR / "template_spreadsheet.csv",
@@ -86,8 +89,11 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
 
         # 1. Fetch both relational tables
         audio_stimuli = spreadsheet.worksheet("audio_stimuli").get_all_records()
-        caption_records = spreadsheet.worksheet("captions_table").get_all_records()
-
+        # Caption records from original collection. 
+        # caption_records = spreadsheet.worksheet("captions_table").get_all_records()
+        # Caption Records for AB testing. 
+        caption_records = spreadsheet.worksheet("ab_source_table").get_all_records()
+        
         # 2. Group captions by their foreign key (audio_id)
         captions_by_rir = {"comparisons": []}
         
@@ -237,23 +243,24 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
     }
     
     secure_urls = {}
-    for folder, filename in file_mappings.items():
-        if filename: # Ensure it's not a blank string
-            # Combine them to create the exact GCS object path
-            gcs_object_path = f"audio/{folder}/{filename}"
-            secure_urls[filename] = generate_presigned_url(
-                bucket_name="stimuli", 
-                object_path=gcs_object_path, 
-                expiration=URL_EXPIRATION
-            )
+    if SHOW_AUDIO_FILES:
+        for folder, filename in file_mappings.items():
+            if filename: # Ensure it's not a blank string
+                # Combine them to create the exact GCS object path
+                gcs_object_path = f"audio/{folder}/{filename}"
+                secure_urls[filename] = generate_presigned_url(
+                    bucket_name="stimuli", 
+                    object_path=gcs_object_path, 
+                    expiration=URL_EXPIRATION
+                )
             
     payload: dict[str, Any] = {
         "phase": phase,
         "trial_index": trial_index,
         "rir_id": row.rir_id,
-        "clap_file_url": secure_urls.get(clap_file, f"/audio/claps/{clap_file}"),
-        "music_file_url": secure_urls.get(music_file, f"/audio/music/{music_file}"),
-        "speech_file_url": secure_urls.get(speech_file, f"/audio/speech/{speech_file}"),
+        "clap_file_url": secure_urls.get(clap_file, f"/audio/claps/{clap_file}") if SHOW_AUDIO_FILES else "",
+        "music_file_url": secure_urls.get(music_file, f"/audio/music/{music_file}") if SHOW_AUDIO_FILES else "",
+        "speech_file_url": secure_urls.get(speech_file, f"/audio/speech/{speech_file}") if SHOW_AUDIO_FILES else "",
         "metadata": row.metadata,
     }
     
@@ -306,6 +313,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
     
     rng = _make_rng(seed_value)
     rows = _load_stimuli(session_id)
+    print(f"DEBUG: Loaded {len(rows)} stimuli rows for session_id: {session_id}")
     # 1. Partition the pools based on your new processing rules
     step_1_pool = []
     step_2_pool = []
@@ -316,34 +324,35 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         caps = r.num_of_captions
         
         # Step 1: Gathering phase, less than 5 captions
-        if caps < 5 and p_step == 'gathering':
-            step_1_pool.append(r)
+        if STEP_1_TRIALS > 0:
+            if caps <= STEP_1_TRIALS and p_step == 'gathering':
+                step_1_pool.append(r)
             
         # Step 2: Editing phase, exactly 5 captions, must have caption data to edit
-        if (caps == 5 and p_step == 'editing') or r.num_of_captions > 0:
-            step_2_pool.append(r)
-            
-        # Step 3: Editing OR Scoring phase, exactly 5 captions, must have caption data to score
-        if (caps == 5 and p_step in ['editing', 'scoring']) or (r.num_of_captions > r.num_of_scored_captions and r.num_of_captions > 0):
-            step_3_pool.append(r)
-    
-    # print(f"Pools after partitioning: Step 1: {len(step_1_pool)}, Step 2: {len(step_2_pool)}, Step 3: {len(step_3_pool)}")
+        if STEP_2_TRIALS > 0:
+            if (caps <= STEP_2_TRIALS and p_step == 'editing') or r.num_of_captions > 0:
+                if r not in step_1_pool:  # Ensure no overlap with Step 1
+                    step_2_pool.append(r)
+                        
+        # Step 3: Editing OR Scoring phase, exactly 5 captions, must have caption data to score 
+        if STEP_3_TRIALS > 0:
+            # if (caps == STEP_3_TRIALS and p_step in ['editing', 'scoring']) or (r.num_of_captions > r.num_of_scored_captions and r.num_of_captions > 0):
+            if caps <= STEP_3_TRIALS or r.num_of_captions > r.num_of_scored_captions:
+                step_3_pool.append(r)
+    iterator = 0 
     batches = {"step_1": [], "step_2": [], "step_3": []}
-    
     # 2. Select Step 1 
-    # print(f"Pools: Step 1: {len(step_1_pool)}, Step 2: {len(step_2_pool)}, Step 3: {len(step_3_pool)}")
+    print(f"Pools: Step 1: {len(step_1_pool)}, Step 2: {len(step_2_pool)}, Step 3: {len(step_3_pool)}")
+    
     step_1_selected = _pick_rows(step_1_pool, step_1_trials, rng)
-    # print(f"Selected {len(step_1_selected)} rows for Step 1. {step_1_trials} requested.")
     for i, row in enumerate(step_1_selected):
         batches["step_1"].append(_build_trial_payload("step_1", row, i, rng))
     
     used_rir_ids = {r.rir_id for r in step_1_selected} # Track IDs to prevent session overlap
-    # print(f"length of RIR IDs Used: {(len(used_rir_ids))} - {len(rows)}")
     
     # 3. Select Step 2 (Excluding anything used in Step 1)
     available_for_step_2 = [r for r in step_2_pool if r.rir_id not in used_rir_ids]
     if len(available_for_step_2) >= step_2_trials:
-        # print(f"Available for Step 2: {len(available_for_step_2)}")
         step_2_selected = _pick_rows(available_for_step_2, step_2_trials, rng)
         used_rir_ids.update({r.rir_id for r in step_2_selected}) # Update tracking
         
@@ -352,7 +361,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
             
     elif len(available_for_step_2) < step_2_trials:
         print(f"Warning: Only {len(available_for_step_2)} eligible rows for Step 2 after filtering, but {step_2_trials} trials requested.")
-        
+
     # 4. Select Step 3 (Excluding anything used in Step 1 or 2)
     available_for_step_3 = [
         r for r in step_3_pool
@@ -360,6 +369,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         and len(r.synthetic_captions) > 0
         and len(r.human_captions) > 0
     ]
+    
     if len(available_for_step_3) >= step_3_trials:
         step_3_selected = _pick_rows(available_for_step_3, step_3_trials, rng)
         for i, row in enumerate(step_3_selected):
@@ -368,9 +378,9 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         print(f"Warning: Only {len(available_for_step_3)} eligible rows for Step 3 after filtering, but {step_3_trials} trials requested.")
         
     training_urls = {
-        "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_sing.mp3", URL_EXPIRATION),
-        "music_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_drum.mp3", URL_EXPIRATION),
-        "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed.mp3", URL_EXPIRATION),
+        "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_sing.mp3", URL_EXPIRATION) if SHOW_AUDIO_FILES else "",
+        "music_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_drum.mp3", URL_EXPIRATION) if SHOW_AUDIO_FILES else "",
+        "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed.mp3", URL_EXPIRATION) if SHOW_AUDIO_FILES else "",
         "training_baseline_caption": "An auditory experience at in evokes a balanced and natural sensation as sound waves bounce within the grand, cavernous environment.",
     }
     
@@ -383,6 +393,7 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
         "batch_id": uuid4().hex,
         "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
         "training": training_payload,
+        "show_audio_files": SHOW_AUDIO_FILES,
         "stimuli": batches,
         # "pis_url": _get_pdf_urls()["pis_url"],
         # "cf_url": _get_pdf_urls()["cf_url"],
@@ -609,11 +620,17 @@ def submit_response() -> Any:
         caption_a = _clean_value(payload.get("caption_a"))
         caption_b = _clean_value(payload.get("caption_b"))
         selected_caption = _clean_value(payload.get("selected_caption"))
+        accuracy_score_a = _clean_value(payload.get("accuracy_score_a"))
+        accuracy_score_b = _clean_value(payload.get("accuracy_score_b"))
         
         if not caption_a or not caption_b:
             return jsonify({"error": "step_3 requires caption_a and caption_b"}), 400
         if selected_caption not in {"A", "B", "Neither"}:
             return jsonify({"error": "step_3 selected_caption must be A, B, or Neither"}), 400
+        if accuracy_score_a not in {"1", "2", "3", "4"}:
+            return jsonify({"error": "step_3 accuracy_score_a must be 1, 2, 3, or 4"}), 400
+        if accuracy_score_b not in {"1", "2", "3", "4"}:
+            return jsonify({"error": "step_3 accuracy_score_b must be 1, 2, 3, or 4"}), 400
         
         append_row_to_sheet("annotators_table", {
             "prolific_id": annotator_id,
@@ -628,11 +645,15 @@ def submit_response() -> Any:
             
         # append_row_to_sheet("evaluations_table", {
         append_row_to_sheet("ab_eval_table", {
+            "annotator_id": annotator_id,
             "evaluation_id": uuid4().hex,
+            "caption_id": target_caption_id,
             "prolific_id": annotator_id,
             "caption_a": caption_a,
             "caption_b": caption_b,
             "selected_caption": selected_caption,
+            "accuracy_score_a": accuracy_score_a,
+            "accuracy_score_b": accuracy_score_b,
         })
 
         increment_caption_count(rir_id, target_col_name="num_of_scored_captions")
