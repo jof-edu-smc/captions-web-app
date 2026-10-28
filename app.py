@@ -5,9 +5,15 @@ import sys
 import random
 import time
 import pprint
-from google.cloud import storage
+import pandas as pd # type: ignore
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any, cast
+
+try:
+    from google.cloud import storage
+except ImportError:  # pragma: no cover - optional in local editor environments
+    storage = None
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
@@ -44,11 +50,13 @@ CAPTION_KEYS = [
     "Caption 5 - Text",
 ]
 
+STATIC_DIR = str(APP_DIR / 'static')
+
 # FIX: Explicitly pass absolute paths to Flask so it never misses the target inside Docker
 app = Flask(
-    __name__, 
-    static_folder=str(APP_DIR / 'static'),      
-    template_folder=str(APP_DIR / 'static')    
+    __name__,
+    static_folder=STATIC_DIR,
+    template_folder=STATIC_DIR,
 )
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
@@ -61,9 +69,9 @@ class StimulusRow:
     processing_step: str
     num_of_captions: int
     num_of_scored_captions: int
-    human_captions: list[str]
-    synthetic_captions: list[str]
-    caption_ids: list[str]
+    human_caption: str
+    synthetic_caption: str
+    caption_id: str
     metadata: dict[str, Any]
 
 def _clean_value(value: Any) -> str:
@@ -89,72 +97,60 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
 
         # 1. Fetch both relational tables
         audio_stimuli = spreadsheet.worksheet("audio_stimuli").get_all_records()
+        df_stimuli = pd.DataFrame(audio_stimuli)
         # Caption records from original collection. 
         # caption_records = spreadsheet.worksheet("captions_table").get_all_records()
         # Caption Records for AB testing. 
         caption_records = spreadsheet.worksheet("ab_source_table").get_all_records()
+        df_captions = pd.DataFrame(caption_records) 
+        rows = [] 
         
-        # 2. Group captions by their foreign key (audio_id)
-        captions_by_rir = {"comparisons": []}
-        
-        for cap in caption_records:
-            # print(f"Processing caption record: {cap}")
-            r_id = str(cap.get("rir_id", "")).strip()
-            
-            if str(cap.get("session_id", "")).strip() == session_id:
-                continue
-            
-            if r_id not in captions_by_rir:
-                captions_by_rir[r_id] = []
-                            
-            captions_by_rir[r_id].append(cap)
-            
-        rows = []
-        # 3. Construct the flat StimulusRow objects for the frontend
-        for rir in audio_stimuli:
-            rir_id = str(rir.get("rir_id", "")).strip()
-            
-            # print(f"Processing RIR record with ID: {rir_id}")
-            if not rir_id:
-                continue
-            
-            # Fetch all captions linked to this audio file
-            linked_captions = captions_by_rir.get(rir_id, [])
-            caption_ids = [str(c.get("caption_id", "")).strip() for c in linked_captions if c.get("caption_id")]
-            human_captions = [c.get("human_caption", "").strip() for c in linked_captions if c.get("human_caption")]
-            synthetic_captions = [c.get("synthetic_caption", "").strip() for c in linked_captions if c.get("synthetic_caption")]
-            
+        for caption_record in df_captions.itertuples(index=False):
+            rir_value = getattr(caption_record, "rir_id", None)
+            rir_id = str(rir_value).strip() if rir_value is not None else ""
+            caption_id = str(getattr(caption_record, "caption_id", "") or "").strip()
+            if not rir_id or not caption_id:
+                print(f"Warning: Missing rir_id or caption_id in caption record: {caption_record}")
+
+            stimuli_info = df_stimuli[df_stimuli["rir_id"] == rir_id]
+
             metadata = {
-                "duration_seconds": float(rir.get("duration_seconds", 0)),
-                "location": str(rir.get("location_tags", "")),
-                "sample_rate": int(rir.get("sample_rate", "")) if str(rir.get("sample_rate", "")).isdigit() else 0,
-                "rt60": float(rir.get("rt60", 0)),
-                "drr": float(rir.get("drr", 0)),
-                "c50": float(rir.get("c50", 0)),
-                "c80": float(rir.get("c80", 0)), 
-                "d50": float(rir.get("d50", 0)),
+                "duration_seconds": float(stimuli_info["duration_seconds"].iloc[0]) if not stimuli_info.empty and "duration_seconds" in stimuli_info.columns else 0,
+                "location": str(stimuli_info["location_tags"].iloc[0]) if not stimuli_info.empty and "location_tags" in stimuli_info.columns else "",
+                "sample_rate": int(str(stimuli_info["sample_rate"].iloc[0]).strip() or 0) if not stimuli_info.empty and "sample_rate" in stimuli_info.columns else 0,
+                "rt60": float(str(stimuli_info["rt60"].iloc[0]).strip() or 0) if not stimuli_info.empty and "rt60" in stimuli_info.columns else 0,
+                "drr": float(str(stimuli_info["drr"].iloc[0]).strip() or 0) if not stimuli_info.empty and "drr" in stimuli_info.columns else 0,
+                "c50": float(str(stimuli_info["c50"].iloc[0]).strip() or 0) if not stimuli_info.empty and "c50" in stimuli_info.columns else 0,
+                "c80": float(str(stimuli_info["c80"].iloc[0]).strip() or 0) if not stimuli_info.empty and "c80" in stimuli_info.columns else 0,
+                "d50": float(str(stimuli_info["d50"].iloc[0]).strip() or 0) if not stimuli_info.empty and "d50" in stimuli_info.columns else 0,
             }
-            
-            raw_num = str(rir.get("num_of_captions", "0")).strip()
-            num_captions = int(raw_num) if raw_num.isdigit() else 0
-            
-            scored_raw = str(rir.get("num_of_scored_captions", "0")).strip()
-            num_scored_captions = int(scored_raw) if scored_raw.isdigit() else 0
-            
-            row = StimulusRow(
+
+            human_caption = ""
+            if hasattr(caption_record, "human_caption"):
+                human_caption = str(getattr(caption_record, "human_caption", "") or "").strip()
+
+            synthetic_caption = ""
+            for field_name in ("synthetic_gemini_caption", "synthetic_openai_caption"):
+                value = str(getattr(caption_record, field_name, "") or "").strip()
+                if value:
+                    synthetic_caption = value
+                    break
+
+            new_row = StimulusRow(
                 rir_id=rir_id,
-                audio_clap_id=str(rir.get("audio_clap_id", "")).strip(),
-                audio_music_id=str(rir.get("audio_music_id", "")).strip(),
-                processing_step=str(rir.get("processing_step", "")).strip(),  
-                audio_speech_id=str(rir.get("audio_speech_id", "")).strip(),
-                num_of_captions=num_captions,
-                num_of_scored_captions=num_scored_captions,
-                human_captions=human_captions,
-                synthetic_captions=synthetic_captions,
-                caption_ids=caption_ids,
-                metadata=metadata
+                audio_clap_id=str(stimuli_info["audio_clap_id"].iloc[0]) if not stimuli_info.empty and "audio_clap_id" in stimuli_info.columns and stimuli_info["audio_clap_id"].notna().any() else "",
+                audio_music_id=str(stimuli_info["audio_music_id"].iloc[0]) if not stimuli_info.empty and "audio_music_id" in stimuli_info.columns and stimuli_info["audio_music_id"].notna().any() else "",
+                processing_step=str(stimuli_info["processing_step"].iloc[0]) if not stimuli_info.empty and "processing_step" in stimuli_info.columns and stimuli_info["processing_step"].notna().any() else "",
+                audio_speech_id=str(stimuli_info["audio_speech_id"].iloc[0]) if not stimuli_info.empty and "audio_speech_id" in stimuli_info.columns and stimuli_info["audio_speech_id"].notna().any() else "",
+                num_of_captions=int(str(stimuli_info["num_of_captions"].iloc[0]).strip() or 0) if not stimuli_info.empty and "num_of_captions" in stimuli_info.columns and pd.notna(stimuli_info["num_of_captions"].iloc[0]) else 0,
+                num_of_scored_captions=int(str(stimuli_info["num_of_scored_captions"].iloc[0]).strip() or 0) if not stimuli_info.empty and "num_of_scored_captions" in stimuli_info.columns and pd.notna(stimuli_info["num_of_scored_captions"].iloc[0]) else 0,
+                human_caption=human_caption,
+                synthetic_caption=synthetic_caption,
+                caption_id=caption_id,
+                metadata=metadata,
             )
-            rows.append(row)
+            rows.append(new_row)
+
         if not rows:
             raise ValueError("No valid stimuli rows mapped from database.")
         return rows
@@ -200,15 +196,17 @@ def generate_presigned_url(bucket_name: str, object_path: str, expiration: int =
         str: Returns a string of the Signed URL. If error, returns an empty string.
     """
     try:
+        if storage is None:
+            raise RuntimeError("google-cloud-storage is not installed in this environment")
+
         gcp_project = os.getenv("GCP_PROJECT_ID")
         import google.auth # type: ignore
         from google.auth.transport import requests # type: ignore
-        
+
         credentials, _ = google.auth.default()
-        if not os.getenv("RUNNING_LOCAL"):      
+        if not os.getenv("RUNNING_LOCAL"):
             credentials.refresh(requests.Request())
-        # print(f"Obtained credentials of type {credentials} for project {gcp_project}")
-        
+
         storage_client = storage.Client(project=gcp_project, credentials=credentials)
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_path)
@@ -264,15 +262,13 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
         "metadata": row.metadata,
     }
     
-    # Assign a random caption for editing/evaluating if the phase requires it
-    if phase == "step_2" and row.human_captions:
-        selected_caption = rng.choice(row.human_captions)
-        index_sel_cap = row.human_captions.index(selected_caption)
-        payload["caption_id"] = row.caption_ids[index_sel_cap]
-        payload["baseline_caption"] = selected_caption
+    # Assign one human caption or synthetic caption for each phase
+    if phase == "step_2" and row.human_caption:
+        payload["caption_id"] = row.caption_id
+        payload["baseline_caption"] = row.human_caption
 
-    if phase == "step_3" and row.human_captions and row.synthetic_captions:
-        comparison = [rng.choice(row.human_captions), rng.choice(row.synthetic_captions)]
+    if phase == "step_3" and row.human_caption and row.synthetic_caption:
+        comparison = [row.human_caption, row.synthetic_caption]
         rng.shuffle(comparison)
         payload["caption_a"], payload["caption_b"] = comparison
     else:
@@ -366,8 +362,8 @@ def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, s
     available_for_step_3 = [
         r for r in step_3_pool
         if r.rir_id not in used_rir_ids
-        and len(r.synthetic_captions) > 0
-        and len(r.human_captions) > 0
+        and r.synthetic_caption.strip()
+        and r.human_caption.strip()
     ]
     
     if len(available_for_step_3) >= step_3_trials:
@@ -425,29 +421,30 @@ def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
     except Exception as e:
         print(f"Error appending to {sheet_name}: {e}")
 
-def get_caption_by_id(caption_id: str, ) -> None:
+def get_caption_by_id(caption_id: str) -> str | None:
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
     if not spreadsheet_id:
-        return
+        return None
     try:
         import gspread # type: ignore
         import google.auth # type: ignore
-        
+
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
         client = gspread.authorize(credentials)
-        
+
         worksheet = client.open_by_key(spreadsheet_id).worksheet("captions_table")
         cell = worksheet.find(caption_id, in_column=1)
-        
+        if cell is None:
+            return None
+
         row_number = cell.row
         return worksheet.cell(row_number, 5).value
-        
-    except gspread.exceptions.CellNotFound:
-        print(f"Error: rir_id '{caption_id}' not found in audio_stimuli sheet.")
-    except Exception as e:
-        print(f"Error incrementing caption count: {e}")
-        
+
+    except Exception:
+        return None
+
+
 def increment_caption_count(rir_id: str, target_col_name: str) -> None:
     """Finds a specific rir_id in the audio_stimuli sheet and increments its caption count."""
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
@@ -458,36 +455,33 @@ def increment_caption_count(rir_id: str, target_col_name: str) -> None:
     try:
         import gspread # type: ignore
         import google.auth # type: ignore
-        
+
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         credentials, _ = google.auth.default(scopes=scopes)
         client = gspread.authorize(credentials)
-        
+
         worksheet = client.open_by_key(spreadsheet_id).worksheet("audio_stimuli")
         cell = worksheet.find(rir_id, in_column=1)
+        if cell is None:
+            return
+
         row_number = cell.row
-        
+
         if target_col_name == "num_of_captions":
             target_col = 8
-        if target_col_name == "num_of_scored_captions":
+        elif target_col_name == "num_of_scored_captions":
             target_col = 9
-        if target_col_name == "max_captions":
+        elif target_col_name == "max_captions":
             target_col = 10
-        elif target_col == 0:
+        else:
             raise ValueError("No Target Column Name given for updating the number of captions in the dataset for a given RIR ID.")
-            
+
         current_value = worksheet.cell(row_number, target_col).value
-        
-        # 3. Calculate the new value (handling blank cells gracefully)
         new_count = int(current_value) + 1 if current_value else 1
-        
-        # 4. Write the incremented value back to the exact cell
         worksheet.update_cell(row_number, target_col, new_count)
-        
-    except gspread.exceptions.CellNotFound:
-        print(f"Error: rir_id '{rir_id}' not found in audio_stimuli sheet.")
-    except Exception as e:
-        print(f"Error incrementing caption count: {e}")
+
+    except Exception:
+        return
 
 # ROUTE HANDLERS 
 @app.get("/api/health")
@@ -497,7 +491,11 @@ def health_check() -> Any:
 @app.get("/api/get-stimuli")
 def get_stimuli() -> Any:
     session_id = request.args.get("session_id") or uuid4().hex
-    seed_value = request.args.get("seed") or 42
+    seed_value = request.args.get("seed")
+    if seed_value is not None and seed_value != "":
+        seed_value = str(seed_value)
+    else:
+        seed_value = None
 
     try:
         payload = _batch_stimuli(
@@ -693,10 +691,10 @@ def client_log() -> Any:
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
-def catch_all(path):
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    return send_from_directory(app.static_folder, 'index.html')
+def catch_all(path: str):
+    if path != "" and os.path.exists(os.path.join(STATIC_DIR, path)):
+        return send_from_directory(STATIC_DIR, path)
+    return send_from_directory(STATIC_DIR, 'index.html')
 
 if __name__ == "__main__":
     load_dotenv()
