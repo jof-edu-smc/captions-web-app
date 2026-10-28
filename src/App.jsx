@@ -335,7 +335,7 @@ function IntroScreen({ completionUrl, onContinue }) {
     <ScreenShell
       eyebrow="Welcome"
       title="Acoustic Caption Survey"
-      description="This survey asks you to listen to three audio clips that are all located in the same space, and select which caption is better than the other."
+      description="This survey asks you to read a description and look at an image of a space then read two captions that describe what the acoustics sound like. You will then select which caption best describes the acoustics of the space. You can also choose neither or both."
       footer={
         <button className="primary-button" type="button" onClick={onContinue}>
           Proceed
@@ -346,7 +346,7 @@ function IntroScreen({ completionUrl, onContinue }) {
         <span className="caption-label">Create Caption</span> */}
       <div className="intro-grid">
         <label className="text-area-shell">
-          <span><b>Click Proceed to start the survey where you will be selecting between an A and a B caption. More instructions to follow.</b></span>
+          <span><b>Click Proceed to start the survey.</b></span>
           <span>Additionally, please <b>turn off any VPN</b> temporarily should you proceed with the survey.</span>
         </label>
         {completionUrl ? <p className="context-note">Prolific completion link detected and will be used at the end of the study.</p> : null}
@@ -482,7 +482,7 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
           <CaptionAndB trial={trial} selectedCaption={selectAorB} onChange={setSelectAorB} />
           {/* <GrammarScale value={grammarRating} onChange={setGrammarRating} /> */}
         </div>
-        <div className="field-group">
+        {/* <div className="field-group">
           <div className="field-heading">
             <h2>Accuracy of the Description</h2>
             <p>How accurately does the caption describe the space the performances are located in?</p>
@@ -491,7 +491,7 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
           <AccuracyScale value={accuracyRatingA} onChange={setAccuracyRatingA} name="accuracy-a" />
           <h2>Caption B</h2>
           <AccuracyScale value={accuracyRatingB} onChange={setAccuracyRatingB} name="accuracy-b" />
-        </div>
+        </div> */}
       </section>
     </ScreenShell>
   );

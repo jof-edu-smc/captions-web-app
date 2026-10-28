@@ -121,6 +121,7 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
                 "c50": float(str(stimuli_info["c50"].iloc[0]).strip() or 0) if not stimuli_info.empty and "c50" in stimuli_info.columns else 0,
                 "c80": float(str(stimuli_info["c80"].iloc[0]).strip() or 0) if not stimuli_info.empty and "c80" in stimuli_info.columns else 0,
                 "d50": float(str(stimuli_info["d50"].iloc[0]).strip() or 0) if not stimuli_info.empty and "d50" in stimuli_info.columns else 0,
+                "image_link": str(stimuli_info["image_link"].iloc[0]) if not stimuli_info.empty and "image_link" in stimuli_info.columns else "",
             }
 
             human_caption = {"type": "human", "text": ""}
