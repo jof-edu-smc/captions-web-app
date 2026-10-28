@@ -31,8 +31,6 @@ APP_DIR = Path(__file__).resolve().parent
 AUDIO_DIR = APP_DIR / "audio"
 LOCAL_LOG_PATH = APP_DIR / "submissions.csv"
 
-STEP_1_TRIALS = int(os.getenv("STEP_1_TRIALS", "5"))
-STEP_2_TRIALS = int(os.getenv("STEP_2_TRIALS", "5"))
 STEP_3_TRIALS = int(os.getenv("STEP_3_TRIALS", "5"))
 
 URL_EXPIRATION = int(os.getenv("URL_EXPIRATION", "3600"))  # Default to 3600 seconds if not set 
@@ -69,8 +67,8 @@ class StimulusRow:
     processing_step: str
     num_of_captions: int
     num_of_scored_captions: int
-    human_caption: str
-    synthetic_caption: str
+    human_caption: dict[str, str]
+    synthetic_caption: dict[str, str]
     caption_id: str
     metadata: dict[str, Any]
 
@@ -125,17 +123,33 @@ def _load_stimuli(session_id: str) -> list[StimulusRow]:
                 "d50": float(str(stimuli_info["d50"].iloc[0]).strip() or 0) if not stimuli_info.empty and "d50" in stimuli_info.columns else 0,
             }
 
-            human_caption = ""
+            human_caption = {"type": "human", "text": ""}
             if hasattr(caption_record, "human_caption"):
-                human_caption = str(getattr(caption_record, "human_caption", "") or "").strip()
+                human_caption = {
+                    "type": "human",
+                    "text": str(getattr(caption_record, "human_caption", "") or "").strip()
+                }
 
-            synthetic_caption = ""
-            for field_name in ("synthetic_gemini_caption", "synthetic_openai_caption"):
-                value = str(getattr(caption_record, field_name, "") or "").strip()
-                if value:
-                    synthetic_caption = value
-                    break
-
+            synthetic_caption = {"type": "synthetic", "text": ""}
+            if hasattr(caption_record, "synthetic_gemini_caption") and hasattr(caption_record, "synthetic_openai_caption"):
+                synthetic_caption_options = [
+                    {
+                        "type": "synthetic_gemini",
+                        "text": str(getattr(caption_record, "synthetic_gemini_caption", "") or "").strip()
+                    },
+                    {
+                        "type": "synthetic_openai",
+                        "text": str(getattr(caption_record, "synthetic_openai_caption", "") or "").strip()
+                    }
+                ]
+                synthetic_caption = random.choice([cap for cap in synthetic_caption_options if cap["text"]]) if any(cap["text"] for cap in synthetic_caption_options) else {"type": "synthetic", "text": ""}
+            else:
+                for field_name in ("synthetic_gemini_caption", "synthetic_openai_caption"):
+                    value = str(getattr(caption_record, field_name, "") or "").strip()
+                    if value:
+                        synthetic_caption = {"type": "synthetic", "text": value}
+                        break
+            # print(f"Mapping caption_id {caption_id} \n for rir_id {rir_id} \n with human_caption: \n {human_caption['type']}, \n synthetic_caption: {synthetic_caption['type']}")
             new_row = StimulusRow(
                 rir_id=rir_id,
                 audio_clap_id=str(stimuli_info["audio_clap_id"].iloc[0]) if not stimuli_info.empty and "audio_clap_id" in stimuli_info.columns and stimuli_info["audio_clap_id"].notna().any() else "",
@@ -229,29 +243,27 @@ def generate_presigned_url(bucket_name: str, object_path: str, expiration: int =
         return ""
     
 def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: random.Random) -> dict[str, Any]:
-    # Extract file names
     clap_file = Path(row.audio_clap_id).name
     music_file = Path(row.audio_music_id).name
     speech_file = Path(row.audio_speech_id).name
-    
+
     file_mappings = {
         "claps": clap_file,
         "music": music_file,
-        "speech": speech_file
+        "speech": speech_file,
     }
-    
-    secure_urls = {}
+
+    secure_urls: dict[str, str] = {}
     if SHOW_AUDIO_FILES:
         for folder, filename in file_mappings.items():
-            if filename: # Ensure it's not a blank string
-                # Combine them to create the exact GCS object path
+            if filename:
                 gcs_object_path = f"audio/{folder}/{filename}"
                 secure_urls[filename] = generate_presigned_url(
-                    bucket_name="stimuli", 
-                    object_path=gcs_object_path, 
-                    expiration=URL_EXPIRATION
+                    bucket_name="stimuli",
+                    object_path=gcs_object_path,
+                    expiration=URL_EXPIRATION,
                 )
-            
+
     payload: dict[str, Any] = {
         "phase": phase,
         "trial_index": trial_index,
@@ -261,20 +273,22 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
         "speech_file_url": secure_urls.get(speech_file, f"/audio/speech/{speech_file}") if SHOW_AUDIO_FILES else "",
         "metadata": row.metadata,
     }
-    
-    # Assign one human caption or synthetic caption for each phase
-    if phase == "step_2" and row.human_caption:
-        payload["caption_id"] = row.caption_id
-        payload["baseline_caption"] = row.human_caption
 
     if phase == "step_3" and row.human_caption and row.synthetic_caption:
         comparison = [row.human_caption, row.synthetic_caption]
         rng.shuffle(comparison)
-        payload["caption_a"], payload["caption_b"] = comparison
+        payload["caption_id"] = row.caption_id
+        payload["caption_a_text"] = comparison[0]["text"]
+        payload["caption_a_type"] = comparison[0]["type"]
+        payload["caption_b_text"] = comparison[1]["text"]
+        payload["caption_b_type"] = comparison[1]["type"]
     else:
         payload["caption_id"] = None
-        payload["baseline_caption"] = None
-    
+        payload["caption_a_text"] = None
+        payload["caption_a_type"] = None
+        payload["caption_b_text"] = None
+        payload["caption_b_type"] = None
+
     return payload
 
 # def _get_pdf_urls() -> str:
@@ -305,95 +319,28 @@ def _build_trial_payload(phase: str, row: StimulusRow, trial_index: int, rng: ra
 #         print(f"Error fetching PIS PDF url: {e}")
 #         return ""
 
-def _batch_stimuli(step_1_trials: int, step_2_trials: int, step_3_trials: int, seed_value: str | None, session_id: str) -> dict[str, Any]:
-    
+def _batch_stimuli(step_3_trials: int, seed_value: str | None, session_id: str) -> dict[str, Any]:
     rng = _make_rng(seed_value)
     rows = _load_stimuli(session_id)
-    print(f"DEBUG: Loaded {len(rows)} stimuli rows for session_id: {session_id}")
-    # 1. Partition the pools based on your new processing rules
-    step_1_pool = []
-    step_2_pool = []
-    step_3_pool = []
-    
-    for r in rows:
-        p_step = r.processing_step.lower()
-        caps = r.num_of_captions
-        
-        # Step 1: Gathering phase, less than 5 captions
-        if STEP_1_TRIALS > 0:
-            if caps <= STEP_1_TRIALS and p_step == 'gathering':
-                step_1_pool.append(r)
-            
-        # Step 2: Editing phase, exactly 5 captions, must have caption data to edit
-        if STEP_2_TRIALS > 0:
-            if (caps <= STEP_2_TRIALS and p_step == 'editing') or r.num_of_captions > 0:
-                if r not in step_1_pool:  # Ensure no overlap with Step 1
-                    step_2_pool.append(r)
-                        
-        # Step 3: Editing OR Scoring phase, exactly 5 captions, must have caption data to score 
-        if STEP_3_TRIALS > 0:
-            # if (caps == STEP_3_TRIALS and p_step in ['editing', 'scoring']) or (r.num_of_captions > r.num_of_scored_captions and r.num_of_captions > 0):
-            if caps <= STEP_3_TRIALS or r.num_of_captions > r.num_of_scored_captions:
-                step_3_pool.append(r)
-    iterator = 0 
-    batches = {"step_1": [], "step_2": [], "step_3": []}
-    # 2. Select Step 1 
-    print(f"Pools: Step 1: {len(step_1_pool)}, Step 2: {len(step_2_pool)}, Step 3: {len(step_3_pool)}")
-    
-    step_1_selected = _pick_rows(step_1_pool, step_1_trials, rng)
-    for i, row in enumerate(step_1_selected):
-        batches["step_1"].append(_build_trial_payload("step_1", row, i, rng))
-    
-    used_rir_ids = {r.rir_id for r in step_1_selected} # Track IDs to prevent session overlap
-    
-    # 3. Select Step 2 (Excluding anything used in Step 1)
-    available_for_step_2 = [r for r in step_2_pool if r.rir_id not in used_rir_ids]
-    if len(available_for_step_2) >= step_2_trials:
-        step_2_selected = _pick_rows(available_for_step_2, step_2_trials, rng)
-        used_rir_ids.update({r.rir_id for r in step_2_selected}) # Update tracking
-        
-        for i, row in enumerate(step_2_selected):
-            batches["step_2"].append(_build_trial_payload("step_2", row, i, rng))
-            
-    elif len(available_for_step_2) < step_2_trials:
-        print(f"Warning: Only {len(available_for_step_2)} eligible rows for Step 2 after filtering, but {step_2_trials} trials requested.")
 
-    # 4. Select Step 3 (Excluding anything used in Step 1 or 2)
-    available_for_step_3 = [
-        r for r in step_3_pool
-        if r.rir_id not in used_rir_ids
-        and r.synthetic_caption.strip()
-        and r.human_caption.strip()
+    eligible_rows = [
+        row for row in rows
+        if row.synthetic_caption and row.human_caption
     ]
-    
-    if len(available_for_step_3) >= step_3_trials:
-        step_3_selected = _pick_rows(available_for_step_3, step_3_trials, rng)
-        for i, row in enumerate(step_3_selected):
-            batches["step_3"].append(_build_trial_payload("step_3", row, i, rng))
-    elif len(available_for_step_3) < step_3_trials:
-        print(f"Warning: Only {len(available_for_step_3)} eligible rows for Step 3 after filtering, but {step_3_trials} trials requested.")
-        
-    training_urls = {
-        "speech_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_sing.mp3", URL_EXPIRATION) if SHOW_AUDIO_FILES else "",
-        "music_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed_drum.mp3", URL_EXPIRATION) if SHOW_AUDIO_FILES else "",
-        "clap_file_url": generate_presigned_url("stimuli", "training_stimuli/tunnel_entrance_f_1way_mono_processed.mp3", URL_EXPIRATION) if SHOW_AUDIO_FILES else "",
-        "training_baseline_caption": "An auditory experience at in evokes a balanced and natural sensation as sound waves bounce within the grand, cavernous environment.",
-    }
-    
-    training_payload = {
-        "training_step_1": training_urls,
-        "training_step_2": training_urls,
-    }
-    
+
+    batches: dict[str, list[dict[str, Any]]] = {"step_3": []}
+    selected_rows = _pick_rows(eligible_rows, step_3_trials, rng)
+    for i, row in enumerate(selected_rows):
+        batches["step_3"].append(_build_trial_payload("step_3", row, i, rng))
+
     return {
         "batch_id": uuid4().hex,
-        "requested_trials": {"step_1": step_1_trials, "step_2": step_2_trials, "step_3": step_3_trials},
-        "training": training_payload,
+        "requested_trials": {"step_3": step_3_trials},
+        "training": {},
         "show_audio_files": SHOW_AUDIO_FILES,
         "stimuli": batches,
-        # "pis_url": _get_pdf_urls()["pis_url"],
-        # "cf_url": _get_pdf_urls()["cf_url"],
     }
+
 
 def append_row_to_sheet(sheet_name: str, record: dict[str, Any]) -> None:
     """Appends a dictionary record to the specified Google Sheet worksheet."""
@@ -499,8 +446,6 @@ def get_stimuli() -> Any:
 
     try:
         payload = _batch_stimuli(
-            step_1_trials=STEP_1_TRIALS,
-            step_2_trials=STEP_2_TRIALS,
             step_3_trials=STEP_3_TRIALS,
             seed_value=seed_value,
             session_id=session_id,
@@ -520,11 +465,10 @@ def get_stimuli() -> Any:
 @app.post("/api/submit-response")
 def submit_response() -> Any:
     payload = request.get_json(silent=True) or {}
-    
     phase = payload.get("phase")
     
-    if phase not in {"step_1", "step_2", "step_3"}:
-        return jsonify({"error": "phase must be one of step_1, step_2, or step_3"}), 400
+    if phase != "step_3":
+        return jsonify({"error": "phase must be step_3"}), 400
 
     participant_context = payload.get("participant_context") or {}
     
@@ -551,77 +495,20 @@ def submit_response() -> Any:
     # Evaluations:
     # evaluation_id	caption_id	annotator_id	accuracy_score	fluency_score
     # ----------------------------------------------------
-    # ROUTE 1: Generative Captioning -> captions_table
+    # ROUTE 3: Evaluation -> ab_eval_table
     # ----------------------------------------------------
-    if phase == "step_1":
-        generated_text = _clean_value(payload.get("generated_text") or payload.get("response_text"))
-        if not generated_text:
-            return jsonify({"error": "step_1 requires generated_text"}), 400
-        
-        append_row_to_sheet("captions_table", {
-            "caption_id": uuid4().hex, # Create new unique ID for a new caption
-            "rir_id": rir_id,
-            "prolific_id": participant_context.get("prolific_id", ""),
-            "session_id": participant_context.get("session_id", ""),
-            "caption_text": generated_text,
-            "caption_type": "Initial",
-            "parent_caption_id": "",
-        })
-        
-        append_row_to_sheet("annotators_table", {
-            "prolific_id": annotator_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "phase": phase,
-            "study_id": participant_context.get("study_id", ""),
-            "session_id": participant_context.get("session_id", ""),
-            "age_range": participant_context.get("age_range", ""),
-            "experience_in_audio": participant_context.get("experience_in_audio", ""),
-            "hearing_impairment": participant_context.get("hearing", ""),
-        })
-        
-        increment_caption_count(rir_id, target_col_name="num_of_captions")
-    # ----------------------------------------------------
-    # ROUTE 2: Rephrasing/Editing -> captions_table
-    # ----------------------------------------------------
-    elif phase == "step_2":
-        edited_text = _clean_value(payload.get("edited_text") or payload.get("response_text"))
-        if not edited_text:
-            return jsonify({"error": "step_2 requires edited_text"}), 400
-            
-        append_row_to_sheet("captions_table", {
-            "caption_id": uuid4().hex, # Generate a new ID for this new edit
-            "rir_id": rir_id,
-            "prolific_id": participant_context.get("prolific_id", ""),
-            "session_id": participant_context.get("session_id", ""),
-            "caption_text": edited_text, 
-            "caption_type": "Edited",    
-            "parent_caption_id": target_caption_id,
-        })
-        
-        append_row_to_sheet("annotators_table", {
-            "prolific_id": annotator_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "phase": phase,
-            "study_id": participant_context.get("study_id", ""),
-            "session_id": participant_context.get("session_id", ""),
-            "age_range": participant_context.get("age_range", ""),
-            "experience_in_audio": participant_context.get("experience_in_audio", ""),
-        })
-        original_caption = get_caption_by_id(target_caption_id)
-        if edited_text != original_caption:
-            increment_caption_count(rir_id, target_col_name="num_of_captions")
-        
-    # ----------------------------------------------------
-    # ROUTE 3: Evaluation -> evaluations_table
-    # ----------------------------------------------------
-    elif phase == "step_3":
-        caption_a = _clean_value(payload.get("caption_a"))
-        caption_b = _clean_value(payload.get("caption_b"))
+    if phase == "step_3":
+        stimulus = payload.get("stimulus") or {}
+                
+        caption_a_text = _clean_value(stimulus.get("caption_a_text"))
+        caption_b_text = _clean_value(stimulus.get("caption_b_text"))
+        caption_a_type = _clean_value(stimulus.get("caption_a_type"))
+        caption_b_type = _clean_value(stimulus.get("caption_b_type"))
         selected_caption = _clean_value(payload.get("selected_caption"))
         accuracy_score_a = _clean_value(payload.get("accuracy_score_a"))
         accuracy_score_b = _clean_value(payload.get("accuracy_score_b"))
         
-        if not caption_a or not caption_b:
+        if not caption_a_text or not caption_b_text:
             return jsonify({"error": "step_3 requires caption_a and caption_b"}), 400
         if selected_caption not in {"A", "B", "Neither"}:
             return jsonify({"error": "step_3 selected_caption must be A, B, or Neither"}), 400
@@ -647,8 +534,10 @@ def submit_response() -> Any:
             "evaluation_id": uuid4().hex,
             "caption_id": target_caption_id,
             "prolific_id": annotator_id,
-            "caption_a": caption_a,
-            "caption_b": caption_b,
+            "caption_a_text": caption_a_text,
+            "caption_a_type": caption_a_type,
+            "caption_b_text": caption_b_text,
+            "caption_b_type": caption_b_type,
             "selected_caption": selected_caption,
             "accuracy_score_a": accuracy_score_a,
             "accuracy_score_b": accuracy_score_b,
