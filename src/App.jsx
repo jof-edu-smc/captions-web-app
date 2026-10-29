@@ -163,6 +163,7 @@ function CaptionAndB({ trial, selectedCaption, onChange }) {
             </div>
           </div>
       </div>
+      <h2>Select the appropriate option below</h2>
       <div className="caption-scale" role="radiogroup" aria-label="Select the best caption">
         <label className={`caption-option ${selectedCaption === 'A' ? 'caption-option-active' : ''}`} htmlFor="captionA">
           {/* <strong>Caption A</strong>  */}
@@ -459,15 +460,15 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
     return null;
   }
 
-  const canSubmit = Boolean(selectAorB && accuracyRatingA && accuracyRatingB && !submitting);
+  const canSubmit = Boolean(selectAorB && !submitting);
   
   return (
     <ScreenShell
       eyebrow={`${PHASE_LABELS.step_3} · ${phaseIndex + 1}/${totalTrials}`}
-      title="Compare Captions"
-      description="Listen to the three audio files below and follow the directions under 'Select Best Caption'"
+      title="Comparing Captions"
+      description="See instructions below."
       footer={
-        <button className="primary-button" type="button" onClick={() => onSubmit(selectAorB, accuracyRatingA, accuracyRatingB)} disabled={!canSubmit}>
+        <button className="primary-button" type="button" onClick={() => onSubmit(selectAorB)} disabled={!canSubmit}>
           Submit & Next
         </button>
       }
@@ -476,9 +477,10 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
       <section className="stack">
         <div className="field-group">
           <div className="field-heading" style={{ marginBottom: '12px' }}>
-            <h1>Select the Best Caption</h1>
-            <p>Select whether <b>Caption A or B most accurately describes the acoustics of the space</b> by listening to the three audio files you can play below. If <b>none</b> of them effectively describe the acoustics of the space, then <b>select the Neither option</b>. If <b>both</b> of them are equally effective, then <b>select the Both option</b>.</p>
+            {/* <h1>Select the Best Caption</h1> */}
+            <p>Select which caption <b>most accurately describes</b> the acoustics of the space by listening to the three audio files you can play below. If none of them effectively describe the acoustics of the space, then select the <b>Neither</b> option. If both of them are equally effective, then select the <b>Both</b> option.</p>
           </div>
+          
           <CaptionAndB trial={trial} selectedCaption={selectAorB} onChange={setSelectAorB} />
           {/* <GrammarScale value={grammarRating} onChange={setGrammarRating} /> */}
         </div>
@@ -687,16 +689,16 @@ export default function App() {
         phaseIndex={trialIndex.step_3}
         totalTrials={step3Trials.length}
         submitting={submitting}
-        onSubmit={async (selectedCaption, accuracyRatingA, accuracyRatingB) => {
-          if (!trial || !selectedCaption || !accuracyRatingA || !accuracyRatingB) {
+        onSubmit={async (selectedCaption) => {
+          if (!trial || !selectedCaption) {
             return;
           }
           await submitPhaseResponse('step_3', trial, {
             caption_a: trial.caption_a,
             caption_b: trial.caption_b,
             selected_caption: selectedCaption,
-            accuracy_score_a: accuracyRatingA,
-            accuracy_score_b: accuracyRatingB,
+            accuracy_score_a: '',
+            accuracy_score_b: '',
           });
           const nextIndex = trialIndex.step_3 + 1;
           if (nextIndex >= step3Trials.length) {

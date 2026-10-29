@@ -506,17 +506,17 @@ def submit_response() -> Any:
         caption_a_type = _clean_value(stimulus.get("caption_a_type"))
         caption_b_type = _clean_value(stimulus.get("caption_b_type"))
         selected_caption = _clean_value(payload.get("selected_caption"))
-        accuracy_score_a = _clean_value(payload.get("accuracy_score_a"))
-        accuracy_score_b = _clean_value(payload.get("accuracy_score_b"))
+        # accuracy_score_a = _clean_value(payload.get("accuracy_score_a"))
+        # accuracy_score_b = _clean_value(payload.get("accuracy_score_b"))
         
         if not caption_a_text or not caption_b_text:
             return jsonify({"error": "step_3 requires caption_a and caption_b"}), 400
         if selected_caption not in {"A", "B", "Neither"}:
             return jsonify({"error": "step_3 selected_caption must be A, B, or Neither"}), 400
-        if accuracy_score_a not in {"1", "2", "3", "4"}:
-            return jsonify({"error": "step_3 accuracy_score_a must be 1, 2, 3, or 4"}), 400
-        if accuracy_score_b not in {"1", "2", "3", "4"}:
-            return jsonify({"error": "step_3 accuracy_score_b must be 1, 2, 3, or 4"}), 400
+        # if accuracy_score_a not in {"1", "2", "3", "4"}:
+        #     return jsonify({"error": "step_3 accuracy_score_a must be 1, 2, 3, or 4"}), 400
+        # if accuracy_score_b not in {"1", "2", "3", "4"}:
+        #     return jsonify({"error": "step_3 accuracy_score_b must be 1, 2, 3, or 4"}), 400
         
         append_row_to_sheet("annotators_table", {
             "prolific_id": annotator_id,
@@ -540,8 +540,8 @@ def submit_response() -> Any:
             "caption_b_text": caption_b_text,
             "caption_b_type": caption_b_type,
             "selected_caption": selected_caption,
-            "accuracy_score_a": accuracy_score_a,
-            "accuracy_score_b": accuracy_score_b,
+            # "accuracy_score_a": accuracy_score_a,
+            # "accuracy_score_b": accuracy_score_b,
         })
 
         increment_caption_count(rir_id, target_col_name="num_of_scored_captions")
