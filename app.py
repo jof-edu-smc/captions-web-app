@@ -29,16 +29,11 @@ load_dotenv()
 # Define your absolute paths first
 APP_DIR = Path(__file__).resolve().parent
 AUDIO_DIR = APP_DIR / "audio"
-LOCAL_LOG_PATH = APP_DIR / "submissions.csv"
 
 STEP_3_TRIALS = int(os.getenv("STEP_3_TRIALS", "5"))
 
 URL_EXPIRATION = int(os.getenv("URL_EXPIRATION", "3600"))  # Default to 3600 seconds if not set 
 SHOW_AUDIO_FILES = os.getenv("SHOW_AUDIO_FILES", "True").strip().lower() in {"1", "true", "yes", "on"}
-
-STIMULUS_CANDIDATES = [
-    APP_DIR / "template_spreadsheet.csv",
-]
 
 CAPTION_KEYS = [
     "Caption 1 - Text",
