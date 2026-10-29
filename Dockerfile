@@ -37,8 +37,6 @@ RUN pip install --no-cache-dir gunicorn
 
 # Copy backend files and application data
 COPY app.py ./
-COPY template_spreadsheet.csv ./
-COPY submissions.csv ./
 
 # Copy the compiled static frontend assets from Stage 1 into the 'static' folder
 COPY --from=frontend-builder /app/dist/ /app/static/
