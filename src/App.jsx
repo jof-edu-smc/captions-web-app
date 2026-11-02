@@ -478,7 +478,7 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
         <div className="field-group">
           <div className="field-heading" style={{ marginBottom: '12px' }}>
             {/* <h1>Select the Best Caption</h1> */}
-            <p>Select which caption <b>most accurately describes</b> the acoustics of the space by listening to the three audio files you can play below. If none of them effectively describe the acoustics of the space, then select the <b>Neither</b> option. If both of them are equally effective, then select the <b>Both</b> option.</p>
+            <p>Select which caption <b>most accurately describes</b> the acoustics of the space by reading the information below and viewing the photo (if available). If none of them effectively describe the acoustics of the space, then select the <b>Neither</b> option. If both of them are equally effective, then select the <b>Both</b> option.</p>
           </div>
           
           <CaptionAndB trial={trial} selectedCaption={selectAorB} onChange={setSelectAorB} />

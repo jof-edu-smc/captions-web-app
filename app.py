@@ -33,7 +33,7 @@ AUDIO_DIR = APP_DIR / "audio"
 STEP_3_TRIALS = int(os.getenv("STEP_3_TRIALS", "5"))
 
 URL_EXPIRATION = int(os.getenv("URL_EXPIRATION", "3600"))  # Default to 3600 seconds if not set 
-SHOW_AUDIO_FILES = os.getenv("SHOW_AUDIO_FILES", "True").strip().lower() in {"1", "true", "yes", "on"}
+SHOW_AUDIO_FILES = os.getenv("SHOW_AUDIO_FILES", "False").strip().lower() in {"1", "true", "yes", "on"}
 
 CAPTION_KEYS = [
     "Caption 1 - Text",
@@ -221,8 +221,7 @@ def generate_presigned_url(bucket_name: str, object_path: str, expiration: int =
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(object_path)
         # print(f"SA EMAIL: {os.getenv('GCP_SERVICE_ACCOUNT_EMAIL')}")
-        # sa_email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
-        sa_email = "972036545446-compute@developer.gserviceaccount.com" 
+        sa_email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
 
         url = blob.generate_signed_url(
             version="v4",
