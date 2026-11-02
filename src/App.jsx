@@ -336,7 +336,7 @@ function IntroScreen({ completionUrl, onContinue }) {
     <ScreenShell
       eyebrow="Welcome"
       title="Acoustic Caption Survey"
-      description="This survey asks you to read a description and look at an image of a space then read two captions that describe what the acoustics sound like. You will then select which caption best describes the acoustics of the space. You can also choose neither or both."
+      description="This survey asks you to read a description and view an image of a location. Then, you will read two captions that describe how the acoustics of that location sound. You will then select which caption best describes the acoustics of the space. You can also choose neither or both."
       footer={
         <button className="primary-button" type="button" onClick={onContinue}>
           Proceed
@@ -478,9 +478,8 @@ function Step3Screen({ trial, phaseIndex, totalTrials, onSubmit, submitting }) {
         <div className="field-group">
           <div className="field-heading" style={{ marginBottom: '12px' }}>
             {/* <h1>Select the Best Caption</h1> */}
-            <p>Select which caption <b>most accurately describes</b> the acoustics of the space by reading the information below and viewing the photo (if available). If none of them effectively describe the acoustics of the space, then select the <b>Neither</b> option. If both of them are equally effective, then select the <b>Both</b> option.</p>
+            <p><b>Select the caption A or B</b>, whichever <b>best describes</b> the acoustics of the location. If none accurately describe the location&apos;s acoustics, then select the <b>Neither</b> option. If both of them are accurate, then select the <b>Both</b> option.</p>
           </div>
-          
           <CaptionAndB trial={trial} selectedCaption={selectAorB} onChange={setSelectAorB} />
           {/* <GrammarScale value={grammarRating} onChange={setGrammarRating} /> */}
         </div>
